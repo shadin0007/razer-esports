@@ -1,0 +1,8 @@
+:lang(ar-MENA) #bsv3pro .bo-temp .content .body-copy .cta-s2, 
+:lang(en-MENA) #bsv3pro .bo-temp .content .body-copy .cta-s2,
+:lang(es-MX) #bsv3pro .bo-temp .content .body-copy .cta-s2, 
+:lang(pt-BR) #bsv3pro .bo-temp .content .body-copy .cta-s2, 
+:lang(zh-CN) #bsv3pro .bo-temp .content .body-copy .cta-s2 {
+    display: none;
+}
+ @media screen and (max-width:767px){} @media screen and (-webkit-max-device-pixel-ratio: 1) and (min-width: 1200px), screen and (min-width: 768px) and (max-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1) and (min-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1.5) and (min-width: 1200px){}

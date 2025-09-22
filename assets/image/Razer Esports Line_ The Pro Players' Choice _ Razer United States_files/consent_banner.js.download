@@ -1,0 +1,76 @@
+cookieSettings = async function(){
+
+if(location.hostname.indexOf(".razer.com") != -1){
+	document.querySelector("head").insertAdjacentHTML('beforeend', `<style>.cky-btn-revisit-wrapper{display:none !important;} html.yui3-js-enabled .cky-preference-center input.cky-opt-out-checkbox[type="checkbox"]:after {
+    display: none !important;}</style>`);
+}
+
+await new Promise(r => setTimeout(r, 900));
+
+if(location.hostname == "www.razer.com"){
+let cookieelem = document.querySelector(".footer-container .legal-term > ul li:last-child");
+if(cookieelem){
+	let cookiesettings = `<!--Cookie Settings START-->
+	<style>
+	.cookie-settings-button, .cookie-settings-button:visited, .cookie-settings-button:active, .cookie-settings-button:focus{background: transparent;background-color: transparent;font: inherit;color: #999;padding: 0;margin: 0;cursor: pointer;border: none;text-decoration:none;top:0!important;font-size: inherit!important;}
+	@media (max-width: 767px){.cookie-settings-button {  padding: 0 0.25rem!important;}}
+.cookie-settings-button:hover{background: transparent;background-color: transparent;border: none;text-decoration:underline;color:#fff;}
+.cookie-settings-button:focus-visible{outline: 2px solid #fff;color: #44d62c;}
+	.cookie-settings-button>span{display: none;}
+	[lang|="en"] .cookie-settings-button [lang="en"],
+	[lang="zh-CN"] .cookie-settings-button [lang="zh-CN"],
+	[lang="zh-HK"] .cookie-settings-button [lang="zh"],
+	[lang="zh-TW"] .cookie-settings-button [lang="zh"],
+	[lang="fr-CA"] .cookie-settings-button [lang="fr-CA"],
+	[lang|="fr"] .cookie-settings-button [lang="fr"],
+	[lang|="de"] .cookie-settings-button [lang="de"],
+	[lang|="it"] .cookie-settings-button [lang="it"],
+	[lang|="ja"] .cookie-settings-button [lang="ja"],
+	[lang|="ko"] .cookie-settings-button [lang="ko"],
+	[lang|="es"] .cookie-settings-button [lang="es"],
+	[lang|="pt"] .cookie-settings-button [lang="pt"],
+	[lang|="ar"] .cookie-settings-button [lang="ar"],
+	[lang|="my"] .cookie-settings-button [lang="my"],
+	[lang|="th"] .cookie-settings-button [lang="th"],
+	[lang|="tr"] .cookie-settings-button [lang="tr"],
+	[lang|="vi"] .cookie-settings-button [lang="vi"],
+	[lang|="id"] .cookie-settings-button [lang="id"]
+	{display: inline;}
+	</style>
+	<button type="button" class="cookie-settings-button" >
+	<span lang="en">Cookie Settings</span>
+	<span lang="zh-CN">Cookie 设置</span>
+	<span lang="zh">Cookie 設置</span>
+	<span lang="fr">Paramètres des cookies</span>
+	<span lang="fr-CA">Paramètres des témoins</span>
+	<span lang="de">Cookie-Einstellungen</span>
+	<span lang="it">Impostazioni cookie</span>
+	<span lang="ja">Cookie 設定</span>
+	<span lang="ko">쿠키 설정</span>
+	<span lang="es">Configuración de cookies</span>
+	<span lang="pt">Definições de cookies</span>
+	<span lang="ar">إعدادات ملف تعريف الارتباط</span>
+	<span lang="my">ကွတ်ကီးဆက်တင်များ</span>
+	<span lang="th">การตั้งค่าคุกกี้</span>
+	<span lang="tr">Tanımlama Bilgisi Ayarları</span>
+	<span lang="vi">Cài đặt cookie</span>
+	<span lang="id">Pengaturan Cookie</span>
+	</button>
+	<!--Cookie Settings END-->`;
+	
+	cookieelem.innerHTML = cookiesettings;
+}
+}
+
+if(location.hostname.indexOf(".razer.com") != -1){
+	document.querySelector("footer .cookie-settings-button, #footer .cookie-settings-button")?.addEventListener("click", function(t) {
+        try {
+            document.querySelector("button.cky-btn-revisit").click();
+			setTimeout(function(){ if(document.querySelector(".cky-modal.cky-modal-open")){ document.querySelector(".cky-modal.cky-modal-open").focus(); } },100);
+        } catch (t) {}
+    });
+}
+
+};
+
+cookieSettings();

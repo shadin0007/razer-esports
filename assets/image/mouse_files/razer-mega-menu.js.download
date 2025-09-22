@@ -1,0 +1,1501 @@
+const megaMenuDelayTime = 250;
+const mobileViewBreakPoint = 1199.99;
+const desktopViewWidth = 1200;
+let moreMenuData = [];
+let megaMenuData;
+let animationTimers = [];
+let delayMegaMenuTimers = [];
+let moreAboutResetPosition = 0;
+(function () {
+    window.addEventListener('initMegaMenu', () => {
+        fetchMenuData();
+    });
+})();
+
+function fetchMenuData() {
+    moreMenuData = [];
+    try {
+        if (RAZER_MEGA_MENU_DATA) {
+            megaMenuData = RAZER_MEGA_MENU_DATA?.navigationNode;
+            createMenu(RAZER_MEGA_MENU_DATA.navigationNode);
+        } else {
+            fetchMenuDataFromApi();
+        }
+    } catch (err) {
+        fetchMenuDataFromApi();
+    }
+}
+
+function fetchMenuDataFromApi() {
+    const dataElement = document.getElementById('razer-mega-menu-container');
+    const backEndApiUrl = (dataElement?.getAttribute('data-url-prefix') || document.getElementsByName('occ-backend-base-url')[0].content);
+    const baseStore = dataElement?.getAttribute('data-base-store');
+    const currency = dataElement?.getAttribute('data-currency');
+    const lang = dataElement?.getAttribute('data-language');
+    const menuApiUrl = (
+        backEndApiUrl + '/rest/v2/' + baseStore
+        + '/cms/components?fields=DEFAULT&currentPage=0&pageSize=25&componentIds=RazerCategoryNavComponent&lang='
+        + lang + '&curr=' + currency
+    );
+
+    fetch(menuApiUrl)
+        .then(response => response.json())
+        .then(data => {
+            megaMenuData = data.component.find(c => c.uid === 'RazerCategoryNavComponent').navigationNode;
+            createMenu(megaMenuData);
+        });
+}
+
+function createMenuContainer() {
+    let mainNavMobileAttributes = '';
+    if (isMobileView()) {
+        mainNavMobileAttributes = 'role="dialog" aria-modal="true" aria-label="Global Navigation Menu"';
+    }
+
+    document.getElementById('razer-mega-menu-container').innerHTML = `
+        <div class="mega-menu-mobile-toggle" id="mega-menu-mobile-open" role="button" tabindex="0" aria-label="Global Navigation Open Menu">
+            <img src="../assets/images/mega-menu/menu-open.png" alt="">
+        </div>
+        <span class="mega-menu-mobile-overlay mega-menu-mobile-toggle"></span>
+        <div class="razer-mega-menu-container" ${mainNavMobileAttributes}>
+            <div class="mega-menu-mobile-toggle" id="mobile-nav-model">
+                <img src="../assets/images/mega-menu/menu-close.png" id="mega-menu-mobile-close" role="button" tabindex="0" alt=""
+                    aria-label="Global Navigation Close Menu">
+            </div>
+            <div class="razer-search-widget-container"></div>
+            <div id="mega-menu-breadcrumb" class="mega-menu-breadcrumb"></div>
+            <nav aria-label="global" id="razer-mega-menu" class="razer-mega-menu"></nav>
+        </div>
+    `;
+    mobileToggleEvent();
+}
+
+function mobileToggleEvent() {
+    document.querySelectorAll('.mega-menu-mobile-toggle').forEach(function (elem) {
+        elem.addEventListener("click", function () {
+            document.body.classList.toggle('overflow-hidden');
+            document.querySelector('.razer-mega-menu-container').classList.toggle('open');
+            document.querySelector('.mega-menu-mobile-overlay').classList.toggle('open');
+            updateSearchBoxPosition();
+            removeMobileActiveStates();
+            resetBreadCrumb();
+            document.getElementById('razer-mega-menu-container').classList.remove('submenu-open');
+            toggleAllActiveMenus();
+        });
+    });
+}
+
+function createMenu(data) {
+    createMenuContainer();
+    const menuTreeData = getVisibleMenus(data?.children);
+    if (menuTreeData && menuTreeData.length) {
+        const menuHolder = document.querySelector('#razer-mega-menu');
+        let menuHtml = '<ul>' + getLogoHtml();
+        menuTreeData.forEach((menu, index) => {
+            menuHtml += getLevelOneMenuHtml(data, menu, index);
+        });
+        menuHtml += getSearchBoxHtml();
+        menuHtml += getMiniCartHtml();
+        menuHtml += '</ul>';
+        menuHolder.innerHTML = menuHtml;
+        onSubMenuClick();
+        delayMegaMenu();
+        onMegaMenuMouseEnter();
+        onMegaMenuMouseLeave();
+        updateElementsForAccessibility();
+        updateLevelOneNavWidth();
+        bindAccessibilityEvents();
+        setMoreAboutInitialPosition();
+        initResize();
+    }
+}
+
+function initResize() {
+    window.addEventListener('resize', () => {
+        if (
+            !(document.activeElement === document.querySelector('.search-box .search-box__input')) &&
+            !document.querySelector('.search-box .search-box__input:focus')
+        ) {
+            resetSearchBox();
+            createCommonNavListItems();
+            updateLevelOneNavWidth();
+            updateElementsForAccessibility();
+            resetSubMenuPlaces();
+        }
+    });
+}
+
+function getLevelOneMenuHtml(data, menu, index) {
+    let menuHtml = '';
+    const levelOneMenuId = 'level-one-' + menu.uid;
+    const mainMenuLinkUrl = getMenuUrl(menu);
+    let subMenuHtml = getSubMenuHtml(data, menu.children, 1, menu.uid);
+    if (subMenuHtml) {
+        subMenuHtml = `<div class="razer-mega-menu-bg" role="region" aria-labelledby="${levelOneMenuId}"><button class="mega-menu-close-button" aria-label="Close"></button><div class="razer-mega-menu-container razer-mobile-custom-scrollbar" id="mega-menu-${menu.uid}">${subMenuHtml}<div class="razer-more-about-container" id="more-${index}"></div><div class="fade-bottom"></div></div></div><span class="razer-mega-menu-container-bg"></span>`;
+    }
+    let controlHtml = '';
+    let expandClassHtml = '';
+    let levelOneToggleBtn = '';
+    if (menu.children && menu.children.length) {
+        expandClassHtml = 'class="have-children"';
+        controlHtml = 'aria-controls="mega-menu-' + menu.uid + '" data-toggle-id="' + menu.uid + '"';
+        levelOneToggleBtn = '<button aria-expanded="false" ' + controlHtml + ' aria-label="' + menu.title + '" class="level-one-menu level-one-toggle-button"><span class="nav-menu-title">' + menu.title + '</span></button>';
+    }
+
+    let menuClickElement = '<button id="' + levelOneMenuId + '" ' + controlHtml + ' class="level-one-menu"><span class="nav-menu-title">' + menu.title + '</span></button>';
+    if (mainMenuLinkUrl) {
+        menuClickElement = '<a onclick="resetAlgoliaData()" id="' + levelOneMenuId + '" class="level-one-menu" ' + getMenuTarget(menu) + ' href="' + getFinalUrl(mainMenuLinkUrl) + '"><span class="nav-menu-title">' + menu.title + '</span></a>';
+        menuClickElement += levelOneToggleBtn;
+    }
+
+    menuHtml += '<li ' + expandClassHtml + ' data-more-menu-uid="' + menu.uid + '">' + menuClickElement + subMenuHtml + '</li>';
+
+    const levelOneMoreMenu = getMoreMenuData(menu);
+    if (levelOneMoreMenu && levelOneMoreMenu.length) {
+        moreMenuData.push({
+            uid: menu.uid,
+            entries: menu.entries,
+            data: levelOneMoreMenu
+        });
+    }
+
+    return menuHtml;
+}
+
+function getLogoHtml() {
+    let logoHtml = '';
+    const logo = document.querySelector('cx-page-slot.SiteLogo');
+    if (!isMobileView() && logo) {
+        logoHtml = '<li class="logo-container default-menu"></li>';
+    }
+
+    return logoHtml;
+}
+
+function getSearchBoxHtml() {
+    let searchBoxHtml = '';
+    const searchBox = document.querySelector('cx-page-slot.SearchBox');
+    if (!isMobileView() && searchBox) {
+        searchBoxHtml = '<li class="search-icon-container default-menu"></li>';
+    }
+
+    return searchBoxHtml;
+}
+
+function getMiniCartHtml() {
+    let miniCarttml = '';
+    const miniCart = document.querySelector('cx-page-slot.MiniCart');
+    if (!isMobileView() && miniCart) {
+        miniCarttml = '<li class="minicart-icon-container default-menu"></li>';
+    }
+
+    return miniCarttml;
+}
+
+function isExternalApp() {
+    return !!(document.getElementById('razer-mega-menu-container')?.getAttribute('data-relative-domain'));
+}
+
+function updateLevelOneNavWidth() {
+    setTimeout(() => {
+        const allMenus = document.querySelectorAll('.razer-mega-menu > ul > li');
+        allMenus.forEach(function (elem) {
+            elem.firstChild.style.removeProperty('padding');
+        });
+        if (!isMobileView()) {
+            let allMenuWidth = 0;
+            allMenus.forEach(function (elem) {
+                allMenuWidth += elem.clientWidth;
+            });
+            const megaMenuWidth = document.querySelector('.razer-mega-menu')?.clientWidth || 0;
+            const remainingSpace = megaMenuWidth - allMenuWidth;
+            if (remainingSpace > 0) {
+                const elementPadding = (remainingSpace / ((allMenus.length - (isExternalApp() ? 0 : 1)) * 2));
+                allMenus.forEach(function (elem) {
+                    elem.firstChild.style.padding = '19px ' + elementPadding + 'px 18px';
+                });
+            }
+        }
+    }, 2000);
+}
+
+function updateSearchBoxPosition() {
+    const mobileNavSearchHolder = document.querySelector('.razer-search-widget-container');
+    const searchBox = document.querySelector('cx-page-slot.SearchBox');
+    const isCheckoutPage = document.location.href.includes('checkout/');
+    const isNavMenuOpen = document.querySelector('.razer-mega-menu-container.open');
+    const miniCartHolder = document.querySelector('cx-page-slot.MiniCart');
+    const isAlgEnabled = !!document.querySelector('.algolia-enabled');
+
+    if (!isAlgEnabled && isMobileView() && !isCheckoutPage && searchBox) {
+        searchBox.querySelector('.search-box.hide')?.removeAttribute('hidden');
+        searchBox.querySelector('.search-box.hide')?.classList.remove('hide');
+
+        if (mobileNavSearchHolder && isNavMenuOpen) {
+            mobileNavSearchHolder.appendChild(searchBox);
+        } else if (miniCartHolder) {
+            const headerElement = document.querySelector('cx-storefront .header');
+            headerElement.insertBefore(searchBox, headerElement.lastElementChild);
+        }
+    }
+
+    if (isAlgEnabled) {
+        createAlgSearchWidgetToggleButton();
+        const deskTopSearchIconContainer = document.querySelector('.search-icon-container');
+        if (isMobileView() && deskTopSearchIconContainer) {
+            const headerElement = document.querySelector('cx-storefront .header');
+            headerElement.insertBefore(searchBox, headerElement.lastElementChild);
+            deskTopSearchIconContainer?.remove();
+        }
+    }
+}
+
+function createAlgSearchWidgetToggleButton() {
+    const mobileSearchToggleSelector = 'razer-alg-search-toggle';
+    const mobileSearchToggleButton = document.createElement('button');
+    const mobileMenuContainer = document.querySelector('#razer-mega-menu-container > .razer-mega-menu-container');
+    const mobileSearchContainer = document.querySelector('#mobile-nav-model + .razer-search-widget-container');
+
+    if (mobileMenuContainer && mobileSearchContainer && !document.querySelector('.' + mobileSearchToggleSelector)) {
+        mobileSearchToggleButton.classList.add(mobileSearchToggleSelector);
+        mobileSearchToggleButton.setAttribute('type', 'button');
+        mobileSearchToggleButton.innerHTML = document.querySelector('#search-widget-label').innerText;
+        mobileMenuContainer.insertBefore(mobileSearchToggleButton, mobileSearchContainer);
+        document.querySelector('.' + mobileSearchToggleSelector).addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            document.dispatchEvent(new Event('openAlgSerachWidget'));
+        });
+    }
+}
+
+function updateElementsForAccessibility() {
+    const mobileNavSearchHolder = document.querySelector('.razer-search-widget-container');
+    const miniCartHolder = document.querySelector('cx-page-slot.MiniCart');
+    const searchBox = document.querySelector('cx-page-slot.SearchBox');
+    const siteLogo = document.querySelector('cx-page-slot.SiteLogo');
+    const isCheckoutPage = document.location.href.includes('checkout/');
+    const searchIconContainer = document.querySelector('.search-icon-container');
+
+    if (isMobileView() && !isCheckoutPage && !mobileNavSearchHolder.querySelector('cx-page-slot.SearchBox')) {
+        positionMobileNavSlots();
+    } else if (!isCheckoutPage && !searchIconContainer?.querySelector('cx-page-slot.SearchBox')) {
+        document.querySelector('.logo-container')?.insertBefore(siteLogo, null);
+        document.querySelector('.minicart-icon-container')?.insertBefore(miniCartHolder, null);
+        searchIconContainer?.insertBefore(searchBox, null);
+    }
+
+    if (isMobileView()) {
+        document.querySelectorAll('.razer-mega-menu-bg').forEach(e => {
+            e.style.removeProperty('width');
+        });
+    } else {
+        document.querySelectorAll('.razer-mega-menu-bg').forEach(e => {
+            e.style.width = document.body.clientWidth + 'px';
+        });
+    }
+}
+
+function positionMobileNavSlots() {
+    const siteLogo = document.querySelector('cx-page-slot.SiteLogo');
+    const mobileNavSearchHolder = document.querySelector('.razer-search-widget-container');
+    const searchBox = document.querySelector('cx-page-slot.SearchBox');
+    const navigationBar = this.document.querySelector('cx-page-slot.NavigationBar');
+    const navHeader = this.document.querySelector('header cx-page-layout');
+    const miniCartBox = document.querySelector('cx-page-slot.MiniCart');
+
+    if (mobileNavSearchHolder && searchBox) {
+        updateSearchBoxPosition();
+    }
+
+    if (navHeader && navigationBar) {
+        navHeader.insertBefore(navigationBar, navHeader.lastElementChild);
+    }
+
+    if (navHeader && siteLogo) {
+        navHeader.insertBefore(siteLogo, navHeader.lastElementChild);
+    }
+
+    if (navHeader && miniCartBox) {
+        navHeader.insertBefore(miniCartBox, navHeader.lastElementChild);
+    }
+    removeCommonNavListItems();
+}
+
+function removeCommonNavListItems() {
+    document.querySelectorAll('.razer-mega-menu>ul>li.default-menu').forEach(e => {
+        e.remove();
+    });
+}
+
+function resetSearchBox() {
+    const razerSearchIcon = document.querySelector('#razer-search-menu');
+    razerSearchIcon?.setAttribute('aria-expanded', 'false');
+    razerSearchIcon?.classList.remove('search-widget-active');
+    document.querySelector('#search-box')?.setAttribute('hidden', 'true');
+    document.querySelector('body').classList.remove('search-widget-animate');
+    document.querySelector('body').classList.remove('search-widget-open');
+    document.querySelector('body').classList.remove('search-widget-animate-visible');
+}
+
+function createCommonNavListItems() {
+    const navListItems = document.querySelector('.razer-mega-menu>ul');
+    const siteLogo = document.querySelector('cx-page-slot.SiteLogo');
+    const searchBox = document.querySelector('cx-page-slot.SearchBox');
+    const miniCartBox = document.querySelector('cx-page-slot.MiniCart');
+    if (!isMobileView() && !navListItems?.querySelector('.logo-container') && searchBox) {
+        const listItemSiteLogo = document.createElement('li');
+        listItemSiteLogo.classList.add('default-menu');
+        listItemSiteLogo.classList.add('logo-container');
+        const listItemSearchBox = document.createElement('li');
+        listItemSearchBox.classList.add('default-menu');
+        listItemSearchBox.classList.add('search-icon-container');
+        const listItemMiniCart = document.createElement('li');
+        listItemMiniCart.classList.add('default-menu');
+        listItemMiniCart.classList.add('minicart-icon-container');
+        if (navListItems && siteLogo) {
+            listItemSiteLogo.appendChild(siteLogo);
+            navListItems.insertBefore(listItemSiteLogo, navListItems.children[0]);
+        }
+
+        if (navListItems) {
+            listItemSearchBox.appendChild(searchBox);
+            navListItems.appendChild(listItemSearchBox);
+        }
+
+        if (navListItems && miniCartBox) {
+            listItemMiniCart.appendChild(miniCartBox);
+            navListItems.appendChild(listItemMiniCart);
+        }
+    }
+}
+
+function bindAccessibilityEvents() {
+    bindShiftTabEvent();
+    bindTabEvent(document.querySelectorAll('.razer-mega-menu>ul>li .focusible-menu, .razer-mega-menu>ul>li > .level-one-menu'));
+    bindDesktopEvents();
+    levelOneToggleBtnEvents();
+}
+
+function levelOneToggleBtnEvents() {
+    document.querySelectorAll('.razer-mega-menu .level-one-toggle-button').forEach(b => {
+        levelOneToggleBtnClickEvent(b);
+        levelOneToggleBtnKeyDownEvent(b);
+    });
+}
+
+function levelOneToggleBtnClickEvent(b) {
+    b.addEventListener('click', (e) => {
+        if (!isMobileView()) {
+            if (document.querySelector('.razer-mega-menu > ul > li.active')) {
+                toggleAllActiveMenus();
+            } else {
+                desktopLevelOneEvent(e.target.closest('li'));
+            }
+
+            e.target.focus();
+        } else {
+            e.preventDefault();
+            e.target.closest('li')?.firstChild?.click();
+        }
+    });
+}
+
+function levelOneToggleBtnKeyDownEvent(b) {
+    b.addEventListener('keydown', (e) => {
+        if (e.keyCode === 13 || e.keyCode === 32) {
+            e.preventDefault();
+            if (!isMobileView()) {
+                if (document.querySelector('.razer-mega-menu > ul > li.active')) {
+                    toggleAllActiveMenus();
+                } else {
+                    desktopLevelOneEvent(e.target.closest('li'));
+                }
+
+                e.target.focus();
+            } else {
+                e.preventDefault();
+                e.target.closest('li')?.firstChild?.click();
+            }
+        }
+    });
+}
+function bindDesktopEvents() {
+    document.querySelector('app-razer-mini-cart .icons.icon-cart')?.addEventListener('keydown', (e) => {
+        const isSubLevelActive = document.querySelector('.razer-mega-menu>ul>li.active .razer-mega-menu-bg');
+        if (!isMobileView() && isSubLevelActive && !e.shiftKey && e.keyCode === 9) {
+            e.preventDefault();
+            document.querySelector('cx-page-slot.SiteLogo a')?.focus();
+        }
+    });
+
+    document.querySelector('cx-page-slot.SiteLogo a')?.addEventListener('keydown', (e) => {
+        const isSubLevelActive = document.querySelector('.razer-mega-menu>ul>li.active .razer-mega-menu-bg');
+        if (!isMobileView() && isSubLevelActive && e.shiftKey && e.keyCode === 9) {
+            e.preventDefault();
+            document.querySelector('app-razer-mini-cart .icons.icon-cart')?.focus();
+        }
+    });
+}
+
+function bindShiftTabEvent() {
+    document.querySelector('#mega-menu-mobile-close').addEventListener('keydown', (e) => {
+        if (isMobileView() && e.shiftKey && e.keyCode === 9) {
+            e.preventDefault();
+            const activeAllMenus = document.querySelectorAll('.razer-mega-menu>ul li .mobile-active .focusible-menu, li.active .razer-more-about-container .focusible-menu');
+            if (activeAllMenus && activeAllMenus.length) {
+                activeAllMenus[activeAllMenus.length - 1]?.focus();
+            } else {
+                const visibleMenus = document.querySelectorAll('.razer-mega-menu>ul>li .level-one-menu');
+                visibleMenus[visibleMenus.length - 1]?.focus();
+            }
+        }
+
+        if (e.keyCode === 13 || e.keyCode === 32) {
+            e.preventDefault();
+            e.target.click();
+        }
+    });
+
+    document.querySelector('#mega-menu-mobile-open').addEventListener('keydown', (e) => {
+        if (e.keyCode === 13 || e.keyCode === 32) {
+            e.preventDefault();
+            e.target.click();
+        }
+    });
+
+    document.querySelector('#mega-menu-mobile-open').addEventListener('click', (e) => {
+        setTimeout(() => {
+            document.querySelector('#mega-menu-mobile-close').focus();
+        }, 10);
+    });
+
+    document.querySelector('#mega-menu-mobile-close').addEventListener('click', (e) => {
+        setTimeout(() => {
+            document.querySelector('#mega-menu-mobile-open').focus();
+        }, 10);
+    });
+}
+
+function bindTabEvent(elements) {
+    elements.forEach(el => {
+        el.addEventListener('keydown', (e) => {
+            const allLoneMenus = document.querySelectorAll('.razer-mega-menu>ul>li > .level-one-menu');
+            const activeAllMenus = document.querySelectorAll('.razer-mega-menu .mobile-active .focusible-menu,  li.active .razer-more-about-container .focusible-menu');
+            if (
+                isMobileView() &&
+                (
+                    (
+                        activeAllMenus &&
+                        activeAllMenus.length &&
+                        (activeAllMenus[activeAllMenus.length - 1] === e.target) &&
+                        !e.shiftKey &&
+                        e.keyCode === 9
+                    ) ||
+                    (
+                        (allLoneMenus[allLoneMenus.length - 1] === e.target) &&
+                        !e.shiftKey &&
+                        e.keyCode === 9
+                    )
+                )
+            ) {
+                e.preventDefault();
+                document.querySelector('#mega-menu-mobile-close').focus();
+            }
+        });
+    });
+}
+
+function getMenuUrl(data) {
+    return (data?.entries && data.entries.length) ? data.entries[0].navigationUrl : '';
+}
+
+function getMenuTarget(data) {
+    return (data?.entries && data.entries.length && data.entries[0].target === true) ? 'target=_blank' : '';
+}
+
+function groupSubMenu(menuChildrens) {
+    return menuChildrens.reduce(function (x, y) {
+        x[y.entries[0].navigationCategory] = (x[y.entries[0].navigationCategory] || []);
+        (x[y.entries[0].navigationCategory]).push(y);
+        return x;
+    }, {});
+}
+
+function getCurrentMenuLevel(menu, menuLevel) {
+    const previousLevel = menu.closest('.submenu-holder')?.closest('.submenu-container');
+    if (menu && previousLevel && menu.id !== previousLevel.id) {
+        return getCurrentMenuLevel(previousLevel, (menuLevel + 1));
+    }
+
+    return menuLevel;
+}
+
+function getSubMenuHtml(data, subMenu, i, uid, previousLevelTitle = '') {
+    subMenu = getVisibleMenus(subMenu);
+    let menuHtml = '';
+    if (subMenu && subMenu.length) {
+        let scrollBarLevelTwoClass = '';
+        let scrollBarClass = 'razer-custom-scroll ';
+        if (i === 1) {
+            scrollBarClass = '';
+            scrollBarLevelTwoClass = 'razer-custom-scroll  ';
+        }
+        menuHtml += '<div class="' + scrollBarLevelTwoClass + 'submenu-container" data-id="' + uid + '" id="' + uid + '"><div class="' + scrollBarClass + 'submenu-holder">';
+        const groupedMenu = groupSubMenu(subMenu);
+        for (const [_key, groupMenu] of Object.entries(groupedMenu)) {
+            groupMenu.forEach((menu, s) => {
+                menuHtml += getSubMenuHtmlData(menu, s, data, previousLevelTitle, groupMenu);
+            });
+        }
+        menuHtml += '</div></div><div class="fade-bottom"></div>';
+    }
+
+    return menuHtml;
+}
+
+function getSubMenuHtmlData(menu, s, data, previousLevelTitle, groupMenu) {
+    let menuHtml = '';
+    const categoryTitle = (menu.entries[0].navigationCategory || '');
+    if (s === 0) {
+        if (categoryTitle) {
+            menuHtml += '<h2 class="mega-menu-submenu-title" id="menu-' + menu.uid + '"><span class="current-menu-title">' + categoryTitle + '</span><span class="previous-menu-title">' + previousLevelTitle + '</span></h2>';
+        }
+
+        menuHtml += '<ul class="menu" aria-labelledby="menu-' + menu.uid + '">';
+    }
+
+    const subMenuLinkUrl = getMenuUrl(menu);
+    let moreMenuAttribute = '';
+    const moreMenu = getMoreMenuData(menu);
+    if (moreMenu && moreMenu.length) {
+        moreMenuData.push({
+            uid: menu.uid,
+            entries: menu.entries,
+            data: moreMenu
+        });
+        moreMenuAttribute = 'data-more-menu-uid="' + menu.uid + '"';
+    }
+    menuHtml += '<li ' + moreMenuAttribute + ' data-uid="' + menu.uid + '">';
+
+    let badgeHtml = '';
+    const currentMenuBadgeData = getMenuBadge(menu);
+    if (currentMenuBadgeData) {
+        badgeHtml = '<div class="mega-menu-badge" style="background-color:'
+            + currentMenuBadgeData.badgeHexCode + ';">'
+            + currentMenuBadgeData.badgeDisplayName + '</div>';
+    }
+
+    const visbileSubMenus = getVisibleMenus(menu?.children);
+    if (visbileSubMenus?.length) {
+        const controlId = menu.uid;
+        menuHtml += '<button class="submenu-button focusible-menu" aria-controls="' + controlId + '" data-toggle-id="' + controlId + '" class="toggle-button">' + menu.title + badgeHtml + '</button>';
+        menuHtml += getSubMenuHtml(data, visbileSubMenus, 0, menu.uid, menu.title);
+    } else {
+        if (!subMenuLinkUrl) {
+            menuHtml += '<button class="submenu-button no-url-events focusible-menu">' + menu.title + badgeHtml + '</button>';
+        } else {
+            menuHtml += '<a onclick="resetAlgoliaData()" ' + getMenuTarget(menu) + ' class="submenu-button focusible-menu" href="' + getFinalUrl(subMenuLinkUrl) + '">' + menu.title + badgeHtml + '</a>';
+        }
+    }
+
+    menuHtml += '</li>';
+
+    if (s === (groupMenu.length - 1)) {
+        menuHtml += '</ul>';
+    }
+
+    return menuHtml;
+}
+
+function getVisibleMenus(menu) {
+    return menu?.filter(menu => menu.entries && menu.entries.length)
+}
+
+function fadeAnimate(currentBtn) {
+    if (currentBtn.closest('.submenu-holder').querySelector('button[aria-expanded="true"]') && currentBtn.nextSibling) {
+        currentBtn.nextSibling.classList.add('fade-animate');
+    } else if (currentBtn.nextSibling) {
+        currentBtn.nextSibling.classList.remove('fade-animate');
+    }
+}
+
+function onSubMenuClickDesktop(currentElement) {
+    if (currentElement?.getAttribute('aria-expanded') == 'true') {
+        return;
+    }
+
+    const currentMenu = currentElement?.closest("li");
+    const currentUl = (currentMenu.closest('.submenu-holder') || currentMenu.closest('ul'));
+    const currentLevel = getCurrentMenuLevel(currentElement, 0);
+    const levelOneContainer = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container:first-child');
+    const containerWidth = levelOneContainer.clientWidth;
+    const containerHeight = levelOneContainer.clientHeight;
+    const buttonWidth = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container:first-child')?.offsetWidth;
+    const offsetWidth = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container').offsetLeft;
+    const moreMenuId = currentMenu.getAttribute('data-more-menu-uid');
+    const allSubMenuContainer = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container');
+    const currentLevelData = {
+        buttonWidth: buttonWidth,
+        currentLevel: currentLevel,
+        offsetWidth: offsetWidth,
+    };
+    allSubMenuContainer.classList.add('place-on-top')
+    fadeAnimate(currentElement);
+    currentUl.querySelectorAll('button').forEach(function (toggleButton) {
+        toggleButton.removeAttribute('aria-expanded', 'false');
+        toggleButton.closest('li')?.classList.remove('active');
+        toggleButton.closest('li')?.querySelectorAll('.submenu-container').forEach(l => {
+            l.style.width = '';
+        })
+    });
+    const borderWidth = 4;
+
+    if (currentElement.nextSibling) {
+        let paddingValue = borderWidth;
+        if (currentLevel > 1) {
+            paddingValue = (currentLevel * borderWidth);
+        }
+        currentLevelData.paddingValue = paddingValue;
+        positionMoreAbout(currentLevelData);
+        currentElement.nextSibling.style.left = (offsetWidth + (buttonWidth * currentLevel) - paddingValue) + 'px';
+        currentElement.nextSibling.style.width = (currentLevel === 1 ? buttonWidth * 2 : buttonWidth) + 'px';
+        currentElement.nextSibling.nextSibling.style.left = (offsetWidth + (buttonWidth * currentLevel) - paddingValue + (borderWidth * 1.5)) + 'px';
+        currentElement.nextSibling.nextSibling.style.width = (buttonWidth - (borderWidth * 2) - borderWidth) + 'px';
+        currentElement.nextSibling.style.height = containerHeight + 'px';
+        currentElement.nextSibling.firstChild.style['min-width'] = (containerWidth - borderWidth) + 'px';
+        currentElement?.setAttribute('aria-expanded', 'true');
+        currentMenu?.classList.add('active');
+    }
+    updateMoreMenuData(moreMenuId);
+    setTimeout(() => {
+        allSubMenuContainer.classList.remove('place-on-top')
+    }, 500);
+}
+
+function resetSubMenuPlaces() {
+    if (!isMobileView()) {
+        const allSubMenuHolder = document.querySelector('.razer-mega-menu>ul>li>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container .submenu-holder button.submenu-button[aria-expanded="true"]+.submenu-container');
+        const moreMenuContainer = document.querySelector('.razer-mega-menu > ul > li.active .razer-more-about-container');
+        if (allSubMenuHolder) {
+            allSubMenuHolder.style.visibility = 'hidden';
+        }
+        if (moreMenuContainer) {
+            moreMenuContainer.style.visibility = 'hidden';
+        }
+
+        setTimeout(() => {
+            const allExpandedMenus = document.querySelectorAll('.razer-mega-menu>ul>li>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container .submenu-holder button.submenu-button[aria-expanded="true"]+.submenu-container');
+            allExpandedMenus?.forEach((e, i) => {
+                const currentLevel = i + 1;
+                updateMenuPlaces(currentLevel, e)
+            });
+            if (allSubMenuHolder) {
+                allSubMenuHolder.style.visibility = 'visible';
+            }
+
+            if (allExpandedMenus.length === 0) {
+                updateMenuPlaces(0, null);
+            }
+        }, 500);
+
+        setTimeout(() => {
+            if (moreMenuContainer) {
+                moreMenuContainer.style.visibility = 'visible';
+            }
+        }, 700);
+    }
+}
+
+function updateMenuPlaces(currentLevel, e) {
+    const levelOneContainer = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container:first-child');
+    if (levelOneContainer) {
+        const containerWidth = levelOneContainer.clientWidth;
+        const containerHeight = levelOneContainer.clientHeight;
+        const buttonWidth = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container:first-child')?.offsetWidth;
+        const offsetWidth = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container').offsetLeft;
+        let paddingValue = 4;
+        if (currentLevel > 1) {
+            paddingValue = (8 * currentLevel);
+        }
+
+        if (e) {
+            e.style.left = (offsetWidth + (buttonWidth * currentLevel) - paddingValue) + 'px';
+            e.style.width = containerWidth + 'px';
+            e.style.height = containerHeight + 'px';
+            e.firstChild.style['min-width'] = (containerWidth - 4) + 'px';
+        }
+        const currentLevelData = {
+            buttonWidth: buttonWidth,
+            currentLevel: currentLevel,
+            offsetWidth: offsetWidth,
+            paddingValue: paddingValue
+        };
+        positionMoreAbout(currentLevelData);
+    }
+}
+
+function onSubMenuClickMobile(currentElement) {
+    menuScrollToTop();
+    currentElement = currentElement.closest('button');
+    const currentMenu = currentElement?.closest("li");
+    const moreMenuId = currentMenu.getAttribute('data-more-menu-uid');
+    document.getElementById('razer-mega-menu-container').classList.remove('level-one-expanded');
+    document.getElementById('razer-mega-menu-container').classList.add('submenu-open');
+    document.querySelectorAll('.razer-mega-menu .razer-mega-menu-container .submenu-container button, .razer-mega-menu .razer-mega-menu-container .submenu-container a').forEach(function (elem) {
+        elem.classList.add('displayNone');
+        elem.closest('li').classList.add('invisible-menu');
+    });
+    currentElement.classList.add('displayNone');
+    currentElement?.closest("li").querySelectorAll('.submenu-container button, .submenu-container a').forEach(function (elem) {
+        elem.classList.remove('displayNone');
+        elem.closest('li').classList.remove('invisible-menu');
+
+        if (elem?.tagName?.toLowerCase() === 'button') {
+            elem.setAttribute('aria-expanded', 'false');
+        }
+    });
+    currentElement?.setAttribute('aria-expanded', 'true');
+    document.querySelector('.mobile-active-menu')?.classList.remove('mobile-active-menu');
+    currentElement.closest("li")?.classList.add('mobile-active-menu');
+    updateMoreMenuData(moreMenuId);
+    createBreadCrumb(currentElement);
+}
+
+function onSubMenuClick() {
+    document.querySelectorAll('.razer-mega-menu .razer-mega-menu-container button').forEach(function (elem) {
+        elem.addEventListener("click", function (evt) {
+            const currentElement = evt?.currentTarget;
+            if (isMobileView()) {
+                onSubMenuClickMobile(currentElement)
+            } else {
+                onSubMenuClickDesktop(currentElement);
+            }
+        });
+    });
+}
+
+function menuScrollToTop() {
+    if (isMobileView()) {
+        document.querySelector('.razer-mega-menu-container.open .razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container')?.scrollTo({ top: 0 });
+    }
+}
+
+function getMoreMenuUid() {
+    const allSelectedMenu = document.querySelectorAll('.razer-mega-menu-container li.active[data-more-menu-uid]');
+    return allSelectedMenu[allSelectedMenu.length - 1]?.getAttribute('data-more-menu-uid');
+}
+
+function updateMoreMenuData(uid) {
+    if (!uid) {
+        uid = getMoreMenuUid();
+    }
+    if (!uid) {
+        return;
+    }
+
+    const moreMenuContainer = document.querySelector('.razer-mega-menu > ul > li.active .razer-more-about-container');
+    const moreMenuUidData = moreMenuData.find(moreMenu => moreMenu.uid === uid);
+    if (moreMenuContainer && moreMenuUidData?.data && moreMenuUidData.data.length) {
+        const moreMenuTitle = getMoreAboutTitle(moreMenuUidData);
+        const moreMenuHtml = getMoreMenuHtml(moreMenuUidData.data, uid, moreMenuTitle);
+        moreMenuContainer.innerHTML = moreMenuHtml;
+        bindTabEvent(document.querySelectorAll('.razer-mega-menu > ul > li.active .razer-more-about-container .focusible-menu'));
+    } else if (moreMenuContainer) {
+        moreMenuContainer.innerHTML = '';
+    }
+}
+
+function setMoreAboutInitialPosition() {
+    if (!isMobileView()) {
+        const moreMenuContainers = document.querySelectorAll('.razer-mega-menu > ul > li .razer-more-about-container');
+        const currentClientWidth = document.body.clientWidth;
+        const navButtonWidth = (desktopViewWidth / 4);
+        const navOffsetWidth = ((currentClientWidth - desktopViewWidth) / 2);
+
+        moreMenuContainers.forEach(e => {
+            e.style.position = 'fixed';
+            e.style.transition = 'none';
+            e.style.left = (navOffsetWidth + navButtonWidth - 4) + 'px';
+            e.style.width = (navButtonWidth + 'px');
+        });
+    }
+}
+
+function enableMoreAboutTransition() {
+    const moreMenuContainers = document.querySelectorAll('.razer-mega-menu > ul > li .razer-more-about-container');
+
+    moreMenuContainers.forEach(e => {
+        e.style.removeProperty('transition');
+    });
+}
+
+function positionMoreAbout(currentLevelData) {
+    if (!isMobileView()) {
+        const moreMenuContainer = document.querySelector('.razer-mega-menu > ul > li.active .razer-more-about-container');
+        moreMenuContainer.style.position = 'fixed';
+        const fadeElement = document.querySelector('.razer-mega-menu > ul > li.active .razer-more-about-container+.fade-bottom');
+        if (currentLevelData.currentLevel === 0) {
+            moreAboutResetPosition = (currentLevelData.offsetWidth + currentLevelData.buttonWidth - 2);
+            moreMenuContainer.style.left = moreAboutResetPosition + 'px';
+            fadeElement.style.left = (currentLevelData.offsetWidth + currentLevelData.buttonWidth + 2) + 'px';
+        } else {
+            let moreMenuLevel = currentLevelData.currentLevel + 1;
+            moreMenuLevel = moreMenuLevel < 4 ? moreMenuLevel : 3;
+            const moreMenuLeft = (currentLevelData.offsetWidth + (currentLevelData.buttonWidth * moreMenuLevel) - currentLevelData.paddingValue - 4);
+            moreMenuContainer.style.left = moreMenuLeft + 'px';
+            fadeElement.style.left = (moreMenuLeft + 6) + 'px';
+        }
+
+        enableMoreAboutTransition();
+    }
+}
+
+function onMegaMenuMouseLeave() {
+    document.querySelectorAll('.razer-mega-menu > ul > li:not(.default-menu)')?.forEach(function (elem) {
+        elem.addEventListener("mouseleave", function (e) {
+            animationTimers.push(
+                setTimeout(() => {
+                    if (!isMobileView() && !elem.classList.contains('keydown-active') && !document.querySelector('.razer-mega-menu > ul > li.active')) {
+                        toggleAllActiveMenus();
+                    }
+                }, 1)
+            );
+
+            animationTimers.push(
+                setTimeout(() => {
+                    if (!isMobileView() && e.target && !e.target.classList.contains('keydown-active') && e.target.classList.contains('active')) {
+                        elem.classList.remove('active');
+                    }
+                }, 500)
+            );
+            elem.querySelector('.razer-mega-menu-container')?.classList.remove('enable-scroll');
+        });
+    });
+
+    document.getElementById('razer-mega-menu-container')?.addEventListener("keydown", function (e) {
+        if (!isMobileView() && e.keyCode === 27 && document.querySelector('.razer-mega-menu > ul > li.active')) {
+            toggleKeyDownState();
+            toggleAllActiveMenus();
+        }
+    });
+
+    document.querySelectorAll('.mega-menu-close-button')?.forEach(function (elem) {
+        elem.addEventListener("click", function () {
+            document.querySelectorAll('.razer-mega-menu > ul > li > .razer-mega-menu-bg>.razer-mega-menu-container')?.forEach(e => {
+                e.style.height = '0px';
+            });
+            animationTimers.push(
+                setTimeout(() => {
+                    const currentActiveMenu = document.querySelector('.razer-mega-menu > ul > li.active');
+                    toggleKeyDownState();
+                    toggleAllActiveMenus();
+                    currentActiveMenu?.firstChild.focus();
+                    currentActiveMenu?.querySelector('.level-one-toggle-button')?.focus();
+                }, 300)
+            );
+        });
+    });
+}
+
+function toggleKeyDownState() {
+    document.querySelectorAll('.razer-mega-menu > ul > li:not(.default-menu)').forEach((animateElement) => {
+        animateElement.classList.remove('keydown-active');
+    });
+}
+
+function toggleAllActiveMenus() {
+    document.querySelectorAll('.razer-mega-menu > ul > li').forEach(function (elem) {
+        elem?.classList?.remove('active');
+        if (elem?.firstChild?.tagName?.toLowerCase() === 'button') {
+            elem?.firstChild?.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    document.querySelectorAll('.submenu-container button, .submenu-container a').forEach(function (elem) {
+        elem.classList.remove('displayNone');
+        elem.closest('li').classList.remove('invisible-menu');
+
+        if (elem?.tagName?.toLowerCase() === 'button') {
+            elem.setAttribute('aria-expanded', 'false');
+        }
+    });
+    document.querySelector('.mobile-active-menu')?.classList.remove('mobile-active-menu');
+
+    document.querySelectorAll('.razer-mega-menu .level-one-toggle-button').forEach(function (elem) {
+        elem?.setAttribute('aria-expanded', 'false');
+    });
+
+    document.querySelectorAll('.razer-mega-menu-container li').forEach(function (elem) {
+        elem?.classList?.remove('active');
+        if (elem?.firstChild?.tagName?.toLowerCase() === 'button' && !elem.firstChild.classList.contains('alg-product-nav')) {
+            elem?.firstChild?.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    document.querySelectorAll('.razer-mega-menu-container .submenu-container .fade-animate').forEach(function (elem) {
+        elem?.classList?.remove('fade-animate');
+    });
+
+    if (!isMobileView()) {
+        const moreMenuContainers = document.querySelectorAll('.razer-mega-menu > ul > li .razer-more-about-container');
+        moreMenuContainers.forEach(e => {
+            e.style.left = moreAboutResetPosition + 'px';
+        });
+    }
+}
+
+function isMobileView() {
+    if (document.body.clientWidth >= mobileViewBreakPoint) {
+        return false;
+    }
+
+    return true;
+}
+
+function isTabletView() {
+    if (document.body.clientWidth <= mobileViewBreakPoint && document.body.clientWidth >= 767) {
+        return true;
+    }
+
+    return false;
+}
+
+function delayMegaMenu() {
+    document.querySelector('nav.razer-mega-menu').addEventListener("mouseleave", function (evt) {
+        resetMegaMenuTimers();
+    });
+}
+
+function resetMegaMenuTimers() {
+    if (delayMegaMenuTimers && delayMegaMenuTimers.length) {
+        delayMegaMenuTimers.forEach(a => {
+            clearTimeout(a);
+        });
+    }
+    delayMegaMenuTimers = [];
+}
+
+function desktopMegaMenuMouseEnter(elem) {
+    if (document.querySelector('.razer-mega-menu > ul > li.active')) {
+        document.querySelector('.razer-mega-menu > ul')?.classList.remove('bg-animation-enabled');
+    } else {
+        document.querySelector('.razer-mega-menu > ul')?.classList.add('bg-animation-enabled');
+    }
+    toggleAllActiveMenus();
+    desktopLevelOneEvent(elem);
+}
+
+function onMegaMenuMouseEnter() {
+    document.querySelectorAll('.razer-mega-menu > ul > li.default-menu')?.forEach(function (elem) {
+        elem.addEventListener("mouseenter", function () {
+            if (!isMobileView() && !elem.classList.contains('keydown-active')) {
+                document.querySelectorAll('.razer-mega-menu > ul > li > .razer-mega-menu-bg>.razer-mega-menu-container')?.forEach(e => {
+                    e.style.height = '0px';
+                });
+                animationTimers.push(
+                    setTimeout(() => {
+                        document.querySelectorAll('.razer-mega-menu > ul > li:not(.default-menu)').forEach((animateElement) => {
+                            animateElement.classList.remove('razer-slide-down');
+                            animateElement.classList.remove('keydown-active');
+                        });
+                        toggleAllActiveMenus();
+                    }, 300)
+                );
+            }
+        });
+    });
+
+    document.querySelectorAll('.razer-mega-menu > ul')?.forEach(function (elem) {
+        elem.addEventListener("mouseleave", function () {
+            if (!document.querySelector('.razer-mega-menu > ul .keydown-active')) {
+                document.querySelectorAll('.razer-mega-menu > ul > li').forEach((animateElement) => {
+                    animateElement.classList.remove('razer-slide-down');
+                    animateElement.querySelector('.razer-mega-menu-container')?.classList.remove('enable-scroll');
+                });
+            }
+        });
+    });
+
+    document.querySelectorAll('.razer-mega-menu .razer-mega-menu-container-bg')?.forEach(function (elem) {
+        elem.addEventListener("mouseenter", function () {
+            if (!document.querySelector('.razer-mega-menu > ul .keydown-active')) {
+                document.querySelectorAll('.razer-mega-menu > ul > li > .razer-mega-menu-bg>.razer-mega-menu-container')?.forEach(e => {
+                    e.style.height = '0px';
+                });
+                animationTimers.push(
+                    setTimeout(() => {
+                        document.querySelectorAll('.razer-mega-menu > ul > li').forEach((animateElement) => {
+                            animateElement.classList.remove('active');
+                            animateElement.classList.remove('razer-slide-down');
+                        });
+                    }, 300)
+                );
+            }
+        });
+    });
+
+    document.querySelectorAll('.razer-mega-menu > ul > li:not(.default-menu)')?.forEach(function (elem) {
+        elem.addEventListener("mouseenter", function () {
+            if (!isMobileView()) {
+                if (!document.querySelector('.razer-mega-menu > ul > li.active')) {
+                    delayMegaMenuTimers.push(
+                        setTimeout(() => {
+                            desktopMegaMenuMouseEnter(elem);
+                        }, megaMenuDelayTime)
+                    );
+                } else {
+                    desktopMegaMenuMouseEnter(elem);
+                }
+            }
+        });
+    });
+
+    document.querySelectorAll('.razer-mega-menu > ul > li:not(.default-menu) > button:not(.level-one-toggle-button)')?.forEach(function (elem) {
+        levelOneKeyDownEvent(elem);
+        levelOneClickEvent(elem);
+    });
+
+    document.getElementById('razer-mega-menu-container')?.addEventListener("keydown", function (e) {
+        document.getElementById('razer-mega-menu-container').classList.add('keydown-enabled');
+    });
+
+    document.querySelectorAll('.razer-mega-menu > ul > li .level-one-menu')?.forEach(function (elem) {
+        elem.addEventListener("click", function (evt) {
+            if (isMobileView() && elem.closest('li').querySelector('.razer-mega-menu-container')) {
+                evt.preventDefault();
+                elem = elem.closest('li');
+                if (!elem.querySelector('.razer-mega-menu-container > .submenu-container.active')) {
+                    removeMobileActiveStates();
+                    elem.querySelector('.razer-mega-menu-container > .submenu-container').classList.add('mobile-active');
+                    document.getElementById('razer-mega-menu-container').classList.add('submenu-open');
+                }
+                document.getElementById('razer-mega-menu-container').classList.add('level-one-expanded');
+                document.querySelector('#razer-mega-menu').removeAttribute('tabindex');
+                levelOneEvent(elem);
+            }
+
+            if (isMobileView()) {
+                createBreadCrumb();
+            }
+        });
+    });
+}
+
+function levelOneKeyDownEvent(elem) {
+    elem.addEventListener("keydown", function (e) {
+        if (e.keyCode === 13 || e.keyCode === 32) {
+            e.preventDefault();
+            if (isMobileView()) {
+                elem.click();
+            } else {
+                const clickedButton = elem.closest('li');
+                clickedButton.classList.add('keydown-active');
+                if (document.querySelector('.razer-mega-menu > ul > li.active')) {
+                    toggleAllActiveMenus();
+                } else {
+                    desktopLevelOneEvent(clickedButton);
+                }
+            }
+        }
+    });
+}
+
+function levelOneClickEvent(elem) {
+    elem.addEventListener("click", function (e) {
+        if (!isMobileView()) {
+            e.preventDefault();
+            const clickedButton = elem.closest('li');
+            clickedButton.classList.add('keydown-active');
+            if (document.querySelector('.razer-mega-menu > ul > li.active')) {
+                toggleAllActiveMenus();
+            } else {
+                desktopLevelOneEvent(clickedButton);
+            }
+        }
+    });
+}
+
+function desktopLevelOneEvent(elem) {
+    levelOneEvent(elem);
+    if (animationTimers && animationTimers.length) {
+        animationTimers.forEach(a => {
+            clearTimeout(a);
+        });
+    }
+    animationTimers = [];
+
+    animationTimers.push(
+        setTimeout(() => {
+            const haveChildren = elem.querySelector('.razer-mega-menu-bg');
+            document.querySelectorAll('.razer-mega-menu > ul > li:not(.default-menu)').forEach((animateElement) => {
+                if (haveChildren) {
+                    animateElement.querySelector('.razer-mega-menu-container')?.classList.remove('enable-scroll');
+                    animateElement.classList.add('razer-slide-down');
+                } else {
+                    animateElement.classList.remove('razer-slide-down');
+                }
+            });
+        }, 1)
+    );
+
+    animationTimers.push(
+        setTimeout(() => {
+            const currentMenuHeight = elem.querySelector('.razer-mega-menu-container > .submenu-container > .submenu-holder')?.clientHeight;
+            if (currentMenuHeight) {
+                document.querySelectorAll('.razer-mega-menu>ul>li:not(.active)>.razer-mega-menu-bg>.razer-mega-menu-container').forEach(e => {
+                    e.style.height = (currentMenuHeight + 48) + 'px';
+                });
+            }
+        }, 100)
+    );
+
+    animationTimers.push(
+        setTimeout(() => {
+            const menuHolderElement = elem.querySelector('.razer-mega-menu-container');
+            const currentMenuHeight = menuHolderElement?.querySelector('.submenu-container > .submenu-holder')?.clientHeight;
+            if (currentMenuHeight) {
+                menuHolderElement.style.height = (currentMenuHeight + 48) + 'px';
+            }
+        }, 200)
+    );
+
+    animationTimers.push(
+        setTimeout(() => {
+            const menuHolderElement = elem.querySelector('.razer-mega-menu-container');
+            const currentActiveMenu = document.querySelector('.razer-mega-menu>ul>li.active .razer-mega-menu-container');
+            if (currentActiveMenu && currentActiveMenu.id === menuHolderElement.id) {
+                menuHolderElement?.classList.add('enable-scroll');
+            }
+        }, 1000)
+    );
+}
+
+function getMoreMenuData(menuData) {
+    return (menuData?.entries && menuData.entries.length) ? menuData.entries[0].navigationEntryMoreAbouts : [];
+}
+
+function getFinalUrl(url) {
+    if (url.toLowerCase().startsWith('http') || url.toLowerCase().startsWith('www')) {
+        return url;
+    }
+    const originUrl = document.location.origin;
+    let finalUrl = '';
+    try {
+        finalUrl = (originUrl + (('/' + RAZER_BASE_URL + url).replace(/\/\//g, '/')));
+    } catch (e) {
+        const baseUrl = document.getElementById('razer-mega-menu-container')?.getAttribute('data-site-prefix') || '';
+        finalUrl = (originUrl + (('/' + baseUrl + url).replace(/\/\//g, '/')));
+    }
+    finalUrl = finalUrl?.replace(/([^:]\/)\/+/g, "$1");
+
+    const relativeDomain = document.getElementById('razer-mega-menu-container')?.getAttribute('data-relative-domain')?.trim();
+
+    if (relativeDomain) {
+        try {
+            const updatedUrlOrigin = new URL(finalUrl).origin;
+            const relativeUrlOrigin = new URL(relativeDomain).origin;
+            finalUrl = finalUrl.replace(updatedUrlOrigin, relativeUrlOrigin);
+        } catch (e) { }
+    }
+
+    return finalUrl?.replace(/([^:]\/)\/+/g, "$1");
+}
+
+function getMoreMenuTarget(targetMenu) {
+    let menuTarget = '';
+    if (targetMenu.target === true) {
+        menuTarget = 'target=_blank';
+    }
+
+    return menuTarget;
+}
+
+function getMoreMenuHtml(moreMenuCurrentData, uid, moreMenuTitle) {
+    let moreMenuHtml = '';
+    if (!moreMenuTitle) {
+        moreMenuTitle = 'More About';
+    }
+    if (moreMenuCurrentData && moreMenuCurrentData.length) {
+        moreMenuHtml = '<h2 class="mega-menu-submenu-title" id="more-menu-' + uid + '">' + moreMenuTitle + '</h2>';
+        moreMenuHtml += '<ul aria-labelledby="more-menu-' + uid + '">';
+        moreMenuCurrentData.forEach(moreMenu => {
+            let moreMenuText = '';
+            if (moreMenu.text) {
+                moreMenuText = moreMenu.text;
+            }
+
+            let moreMenuClickElement = '<button class="no-url-events focusible-menu">' + moreMenuText + '</button>';
+            if (moreMenu.url) {
+                moreMenuClickElement = '<a onclick="resetAlgoliaData()" class="focusible-menu" ' + getMoreMenuTarget(moreMenu) + ' href="' + getFinalUrl(moreMenu.url) + '">' + moreMenuText + '</a>';
+            }
+            moreMenuHtml += '<li>' + moreMenuClickElement + '</li>';
+        });
+        moreMenuHtml += '</ul>';
+    }
+
+    return moreMenuHtml;
+}
+
+function resetAlgoliaData() {
+    localStorage?.removeItem('RAZER_ALGOLIA_SEARCH_DATA');
+}
+
+function getMoreAboutTitle(moreMenuTitleData) {
+    return (moreMenuTitleData?.entries && moreMenuTitleData.entries.length) ? moreMenuTitleData.entries[0].navigationEntryMoreAboutsTitle : '';
+}
+
+function getMenuBadge(badgeMenu) {
+    if (
+        badgeMenu?.entries &&
+        badgeMenu.entries.length &&
+        badgeMenu.entries[0].navigationEntryMenuBadges &&
+        badgeMenu.entries[0].navigationEntryMenuBadges.length
+    ) {
+        const validBadges = badgeMenu.entries[0].navigationEntryMenuBadges.filter(badge => isBadgeNotExpired(badge));
+        if (validBadges && validBadges.length) {
+            return sortBadges(validBadges)[0];
+        }
+
+    }
+
+    return null;
+}
+
+function sortBadges(sortingBadges) {
+    return sortingBadges.sort((a, b) => {
+        const createdDate1 = new Date(a.badgeCreationDate);
+        const createdDate2 = new Date(b.badgeCreationDate);
+        if (createdDate1 < createdDate2) {
+            return 1;
+        } else if (createdDate1 > createdDate2) {
+            return -1;
+        }
+        return 0;
+    }).sort((a, b) => {
+        let startDate1 = a.badgeStartDate;
+        let startDate2 = b.badgeStartDate;
+        if (startDate1 && !startDate2) {
+            return -1;
+        } else if (!startDate1 && startDate2) {
+            return 1;
+        } else if (!startDate1 && !startDate2) {
+            return 0;
+        }
+
+        startDate1 = new Date(a.badgeStartDate);
+        startDate2 = new Date(b.badgeStartDate);
+        if (startDate1 < startDate2) {
+            return 1;
+        } else if (startDate1 > startDate2) {
+            return -1;
+        }
+        return 0;
+    });
+}
+
+function isBadgeNotExpired(badgeData) {
+    let startDate = badgeData.badgeStartDate;
+    let endDate = badgeData.badgeEndDate;
+    const currentDate = new Date();
+
+    if (!startDate) {
+        startDate = currentDate;
+    } else {
+        startDate = new Date(startDate);
+    }
+
+    if (!endDate) {
+        endDate = currentDate;
+    } else {
+        endDate = new Date(endDate);
+    }
+
+    if (currentDate >= startDate && currentDate <= endDate) {
+        return true;
+    }
+
+    return false;
+}
+
+function levelOneEvent(elem) {
+    elem.classList.add('active');
+    if (elem.firstChild?.tagName?.toLowerCase() === 'button') {
+        elem.firstChild?.setAttribute('aria-expanded', 'true');
+    } else {
+        elem.querySelector('.level-one-toggle-button')?.setAttribute('aria-expanded', 'true');
+    }
+    const menuUid = elem.getAttribute('data-more-menu-uid');
+    const currentMenuData = megaMenuData.children.find(menu => menu.uid === menuUid);
+    const moreMenuCurrentData = getMoreMenuData(currentMenuData);
+    const moreMenuTitle = getMoreAboutTitle(currentMenuData);
+    const moreMenuHtml = getMoreMenuHtml(moreMenuCurrentData, currentMenuData.uid, moreMenuTitle);
+    const moreAboutContainer = elem.querySelector('.razer-more-about-container');
+    const borderWidth = 4;
+    menuScrollToTop();
+    if (moreAboutContainer) {
+        const menuContainer = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container>.razer-custom-scroll');
+        const buttonWidth = menuContainer?.offsetWidth || 0;
+        const offsetWidth = menuContainer?.offsetLeft || 0;
+        moreAboutResetPosition = (offsetWidth + buttonWidth - borderWidth);
+        moreAboutContainer.style.position = 'fixed';
+        moreAboutContainer.style.left = moreAboutResetPosition + 'px';
+        moreAboutContainer.style.width = buttonWidth + 'px';
+        moreAboutContainer.style.visibility = 'visible';
+        moreAboutContainer.innerHTML = moreMenuHtml;
+        moreAboutContainer.nextSibling.style.left = (offsetWidth + buttonWidth) + 'px';
+        moreAboutContainer.nextSibling.style.width = (buttonWidth - borderWidth) + 'px';
+        bindTabEvent(document.querySelectorAll('.razer-mega-menu > ul > li.active .razer-more-about-container .focusible-menu'));
+        const fadeElement = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container>.submenu-container+.fade-bottom');
+        fadeElement.style.width = (buttonWidth - (borderWidth * 2) - (borderWidth * 1.5)) + 'px';
+        fadeElement.style.left = (offsetWidth + borderWidth + (borderWidth / 2)) + 'px';
+    }
+}
+
+function getAllActiveLevelElements(currentElement) {
+    const activeElements = [];
+    let activeElement = currentElement;
+    if (!activeElement) {
+        activeElement = document.querySelector('.razer-mega-menu>ul>li.active .level-one-menu[aria-expanded="true"]');
+    }
+    activeElements.push(activeElement);
+    let havePreviousLevel = true;
+
+    while (havePreviousLevel) {
+        activeElement = activeElement?.closest('.submenu-container')?.closest('li')?.firstChild;
+        if (activeElement && activeElement.tagName.toLowerCase() === 'a') {
+            activeElement = activeElement.nextSibling;
+        }
+
+        if (activeElement) {
+            activeElements.push(activeElement);
+        }
+
+        if (!activeElement || activeElement.classList.contains('level-one-menu')) {
+            havePreviousLevel = false;
+        }
+    }
+
+    return activeElements;
+}
+
+function createBreadCrumb(currentElement = null) {
+    const breadcrumbHolder = document.getElementById('mega-menu-breadcrumb');
+    let breadcrumbMenuHtml = '<nav aria-label="breadcrumb"><ul><li><button>Menu</button></li>';
+    const allSelectedMenus = getAllActiveLevelElements(currentElement);
+    let buttonText = '';
+    resetBreadCrumb();
+    const reverseMenuData = [...allSelectedMenus].reverse();
+    reverseMenuData.forEach(function (elem) {
+        buttonText = elem?.firstChild?.textContent;
+        breadcrumbMenuHtml += '<li><button breadcrumb-toggle-id="' + (elem?.getAttribute('data-toggle-id') || "") + '">' + buttonText + '</button></li>';
+    });
+    breadcrumbMenuHtml += '</ul></nav>';
+    breadcrumbMenuHtml += '<button aria-expanded="true" aria-controls="' + getActiveMenuContainerId() + '">' + buttonText + '</button>';
+    breadcrumbHolder.innerHTML = breadcrumbMenuHtml;
+
+    const searchBoxHeight = 60;
+    const breadcrumbHeight = breadcrumbHolder.clientHeight;
+    const menuPosition = breadcrumbHeight + searchBoxHeight;
+    const subMenuHolder = document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container');
+    if (subMenuHolder) {
+        subMenuHolder.style.height = 'calc(100% - ' + (menuPosition + 70) + 'px)';
+        subMenuHolder.style.top = menuPosition + 'px';
+    }
+
+    const allBreadcrumbListButtons = breadcrumbHolder.querySelectorAll('ul>li>button');
+    if (allBreadcrumbListButtons && allBreadcrumbListButtons.length) {
+        allBreadcrumbListButtons[allBreadcrumbListButtons.length - 1].setAttribute('aria-current', 'true');
+    }
+
+    breadcrumbClickEvent();
+    document.querySelector('#mega-menu-breadcrumb > button')?.focus();
+}
+
+function getActiveMenuContainerId() {
+    return document.querySelector('.razer-mega-menu>ul>li.active>.razer-mega-menu-bg>.razer-mega-menu-container')?.id;
+}
+
+function resetBreadCrumb() {
+    document.getElementById('mega-menu-breadcrumb').innerHTML = '';
+}
+
+function removeMobileActiveStates() {
+    document.querySelector('#razer-mega-menu').setAttribute('tabindex', '-1');
+    document.querySelectorAll('.submenu-container.mobile-active')?.forEach(e => {
+        e.classList.remove('mobile-active');
+    });
+}
+
+function breadcrumbClickEvent() {
+    const breadcrumbButtons = document.querySelectorAll('.mega-menu-breadcrumb li button');
+    breadcrumbButtons.forEach(function (elem, index) {
+        elem.addEventListener('keydown', (e) => {
+            if (e.keyCode === 13 || e.keyCode === 32) {
+                e.preventDefault();
+                e.preventDefault();
+                e.currentTarget.click();
+            }
+        });
+        elem.addEventListener("click", function (subElem) {
+            const menuId = subElem.target.getAttribute('breadcrumb-toggle-id');
+            if (elem.closest('li').nextElementSibling !== null) {
+                breadcrumbEventDataUpdate(menuId, index);
+            }
+
+            const allBreadcrumbListButtons = document.querySelectorAll('.mega-menu-breadcrumb li button');
+            if (allBreadcrumbListButtons && allBreadcrumbListButtons.length) {
+                allBreadcrumbListButtons[allBreadcrumbListButtons.length - 1].focus();
+            }
+        });
+    });
+
+    document.querySelector('.mega-menu-breadcrumb > button').addEventListener("click", () => {
+        const breadCrumbList = document.querySelectorAll('.mega-menu-breadcrumb li button');
+        const focusibleElement = breadCrumbList[breadCrumbList.length - 1];
+        breadCrumbList[breadCrumbList.length - 2]?.click();
+        setTimeout(() => {
+            focusToLastSelection(focusibleElement);
+        }, 100);
+    });
+}
+
+function breadcrumbEventDataUpdate(menuId, index) {
+    if (menuId) {
+        if (index === 1) {
+            toggleAllActiveMenus();
+        }
+        const clickableButton = document.querySelector('button[data-toggle-id="' + menuId + '"]');
+
+        if (clickableButton) {
+            clickableButton?.closest('.razer-mega-menu-container')?.closest('li')?.classList.add('active');
+            if (clickableButton.classList.contains('level-one-menu')) {
+                clickableButton?.closest('li')?.classList.add('active');
+            }
+            clickableButton.click();
+        }
+    } else {
+        removeMobileActiveStates();
+        document.getElementById('razer-mega-menu-container').classList.remove('submenu-open');
+        resetBreadCrumb();
+        toggleAllActiveMenus();
+        document.querySelector('nav.razer-mega-menu').focus();
+    }
+}
+
+function focusToLastSelection(element) {
+    if (element) {
+        const menuId = element.getAttribute('breadcrumb-toggle-id');
+        const focusElement = document.querySelector('button[data-toggle-id="' + menuId + '"]');
+        const focusElemtText = element.innerText;
+        if (!focusElement) {
+            document.querySelectorAll('.razer-mega-menu>ul>li>button').forEach(e => {
+                if (focusElemtText === e.innerText) {
+                    e.focus();
+                }
+            });
+        } else {
+            document.querySelector('.mega-menu-breadcrumb > button')?.focus();
+        }
+    }
+}

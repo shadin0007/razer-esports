@@ -1,0 +1,7 @@
+:lang(fr-CA) .content_text_2 blockquote,
+:lang(en-CA) .content_text_2 blockquote {visibility:hidden!important} 
+@media screen and (max-width: 767px) {
+:lang(fr-CA) .content_text_2 blockquote,
+:lang(en-CA) .content_text_2 blockquote {display:none!important} 
+}
+ @media screen and (max-width:767px){} @media screen and (-webkit-max-device-pixel-ratio: 1) and (min-width: 1200px), screen and (min-width: 768px) and (max-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1) and (min-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1.5) and (min-width: 1200px){}

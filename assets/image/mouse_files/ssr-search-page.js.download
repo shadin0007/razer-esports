@@ -1,0 +1,819 @@
+let algSortToggleButton;
+const algSupportLimit = 35;
+const algNewsroomLimit = 35;
+let algSupportOffset = 0;
+let currentSlide = 0;
+let algNotifyMeData;
+try {
+    initAlgViewSwitchEvnets();
+    initAlgSortDropdownEvnets();
+    initSearchPageTabEvnets();
+    initNotifyMeDialogEvents();
+    initCarouselEvents();
+} catch (e) { }
+
+function initNotifyMeDialogEvents() {
+    const notifyMeInput = document.querySelector('#notify-me-input');
+    notifyMeInput.setAttribute('type', 'email');
+    document.addEventListener('openNotifyMe', (e) => {
+        openNotifyMeDialog(e.detail);
+    });
+
+    document.querySelector('#notify-me-close').addEventListener('click', () => {
+        closeNotifyMeDialog();
+    });
+
+    document.querySelector('#alg-notify-me-modal form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        submitNotifyMeForm();
+    });
+
+    notifyMeInput.addEventListener('input', (e) => {
+        validateNotifyMeInput(e.target);
+    });
+
+    notifyMeInput.addEventListener('focus', (e) => {
+        document.querySelector('#alg-notify-me-modal .mat-mdc-form-field-infix').classList.add('mat-mdc-focused');
+        document.querySelector('#alg-notify-me-modal .razer-acc-floating-label').classList.add('mat-focused');
+    });
+
+    notifyMeInput.addEventListener('blur', (e) => {
+        document.querySelector('#alg-notify-me-modal .mat-mdc-form-field-infix').classList.remove('mat-mdc-focused');
+        document.querySelector('#alg-notify-me-modal .razer-acc-floating-label').classList.remove('mat-focused');
+    });
+}
+
+function validateNotifyMeInput(inputElement) {
+    const notifyMeSubmitButton = document.querySelector('#notify-me-submit');
+    const notifyMeInput = document.querySelector('#alg-notify-me-modal .razer-acc-floating-label');
+    if (inputElement.checkValidity()) {
+        inputElement.classList.remove('ng-invalid');
+        inputElement.classList.add('ng-valid');
+        inputElement.removeAttribute('aria-invalid');
+        notifyMeSubmitButton.removeAttribute('disabled');
+        notifyMeSubmitButton.classList.remove('btn-disabled');
+        notifyMeInput.classList.remove('mat-form-field-invalid');
+        notifyMeInput.classList.add('ng-valid');
+    } else {
+        inputElement.classList.add('ng-invalid');
+        inputElement.classList.remove('ng-valid');
+        inputElement.setAttribute('aria-invalid', 'true');
+        notifyMeSubmitButton.setAttribute('disabled', 'true');
+        notifyMeSubmitButton.classList.add('btn-disabled');
+        notifyMeInput.classList.add('mat-form-field-invalid');
+        notifyMeInput.classList.remove('ng-valid');
+    }
+}
+
+function submitNotifyMeForm() {
+    const inputElement = document.querySelector('#notify-me-input');
+    const emailId = inputElement.value;
+    let notifyMeUrl = document.querySelector('#alg-notify-me-modal .modal-body')?.getAttribute('data-notify');
+    notifyMeUrl = notifyMeUrl.replace('algProductCode', algNotifyMeData.code);
+    notifyMeUrl = notifyMeUrl.replace('emailId', emailId);
+    const headerOptions = {
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+        },
+        method: 'POST'
+    };
+
+    fetch(notifyMeUrl, headerOptions)
+        .then(() => {
+            algEventNotifyMe(algNotifyMeEventData);
+            document.querySelector('#alg-notify-me-modal .modal-body.thankyou-content .text-white').innerHTML = emailId;
+            document.querySelector('#alg-notify-me-modal .modal-body.thankyou-content').removeAttribute('hidden');
+            document.querySelector('#alg-notify-me-modal .modal-body:not(.thankyou-content)').setAttribute('hidden', 'true');
+            resetNotifyMeForm();
+        });
+}
+
+function closeNotifyMeDialog() {
+    const notifyMeDialog = document.querySelector('#alg-notify-me-modal');
+    notifyMeDialog.classList.remove('show');
+    notifyMeDialog.classList.remove('d-block');
+    document.querySelector('#alg-notify-me-modal .modal-body.thankyou-content').setAttribute('hidden', 'true');
+    document.querySelector('#alg-notify-me-modal .modal-body:not(.thankyou-content)').removeAttribute('hidden');
+    resetNotifyMeForm();
+}
+
+function resetNotifyMeForm() {
+    const notifyMeSubmitButton = document.querySelector('#notify-me-submit');
+    const inputElement = document.querySelector('#notify-me-input');
+    const notifyMeInput = document.querySelector('#alg-notify-me-modal .razer-acc-floating-label');
+    inputElement.value = '';
+    inputElement.classList.remove('ng-invalid');
+    inputElement.classList.remove('ng-valid');
+    inputElement.removeAttribute('aria-invalid');
+    notifyMeSubmitButton.setAttribute('disabled', 'true');
+    notifyMeSubmitButton.classList.add('btn-disabled');
+    notifyMeInput.classList.remove('mat-form-field-invalid');
+    notifyMeInput.classList.remove('ng-valid');
+}
+
+function openNotifyMeDialog(notifyMeData) {
+    algNotifyMeData = notifyMeData;
+    const notifyMeDialog = document.querySelector('#alg-notify-me-modal');
+    notifyMeDialog.classList.add('show');
+    notifyMeDialog.classList.add('d-block');
+    notifyMeDialog.querySelector('p.text-center span.text-white').innerHTML = notifyMeData.name;
+}
+
+function tabsKeyDownEvents(e, tabSwitchElements) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (e.srcElement?.getAttribute('aria-controls')?.includes('support')) {
+            tabSwitchElements?.[0]?.focus();
+        } else {
+            tabSwitchElements?.[1]?.focus();
+        }
+        e.preventDefault();
+    } else if (e.key === ' ') {
+        e.srcElement?.click();
+        e.preventDefault();
+    }
+}
+
+function updateTabsAccessibilities(currentElement, queryElement) {
+    const tabContentSelector = queryElement.getAttribute('aria-controls');
+    const tabContentElement = document.querySelector('#' + tabContentSelector);
+
+    if (currentElement === tabContentSelector) {
+        queryElement.setAttribute('aria-selected', 'true');
+        queryElement.removeAttribute('tabindex');
+        queryElement.classList.add('active');
+        tabContentElement.classList.add('active');
+    } else {
+        queryElement.removeAttribute('aria-selected');
+        queryElement.setAttribute('tabindex', '-1');
+        queryElement.classList.remove('active');
+        tabContentElement.classList.remove('active');
+    }
+
+    if (
+        tabContentSelector.includes('support') &&
+        queryElement.classList.contains('active') &&
+        !tabContentElement.classList.contains('alg-support-loaded')
+    ) {
+        tabContentElement.classList.add('alg-support-loaded');
+        getAlgSupportTabContent();
+    }
+
+    if (
+        tabContentSelector.includes('newsroom') &&
+        queryElement.classList.contains('active') &&
+        !tabContentElement.classList.contains('alg-newsroom-loaded')
+    ) {
+        tabContentElement.classList.add('alg-newsroom-loaded');
+        getAlgNewsroomTabContent();
+    }
+}
+
+function initSearchPageTabEvnets() {
+    const tabSwitchElements = document.querySelectorAll('#alg-search-page-container tabset .nav-tabs .nav-link');
+    tabSwitchElements?.forEach(eventElement => {
+        eventElement.addEventListener('keydown', (e) => {
+            tabsKeyDownEvents(e, tabSwitchElements);
+        });
+
+        eventElement.addEventListener('click', (e) => {
+            const currentElement = eventElement.getAttribute('aria-controls');
+            if (e.target.classList.contains('active')) {
+                return;
+            }
+
+            tabSwitchElements.forEach(queryElement => {
+                updateTabsAccessibilities(currentElement, queryElement);
+            });
+
+            if (currentElement.includes('support')) {
+                changeURlParams({ sel: 'support' });
+            } else if (currentElement.includes('newsroom')) {
+                changeURlParams({ sel: 'newsroom' });
+            } else {
+                changeURlParams({ sel: 'products' });
+            }
+        })
+    });
+
+    document.querySelector('#support-tab .alg-next-page-btn').addEventListener('click', (e) => {
+        getAlgSupportTabContent();
+    });
+
+    document.querySelector('#newsroom-tab .alg-next-page-btn').addEventListener('click', (e) => {
+        getAlgNewsroomTabContent();
+    });
+    const [ algNewsroomCountry] = (document.querySelector('cx-storefront')?.getAttribute('data-language'))?.toLowerCase().split('_');
+
+
+    if (document.location.href.includes('sel=support')) {
+        getAlgSupportTabContent();
+    }
+    if (document.location.href.includes('sel=newsroom') && algNewsroomCountry !== 'ca') {
+        getAlgNewsroomTabContent();
+    }else {
+        document.querySelector('#newsroom-tab').setAttribute('hidden', 'true');
+    }
+}
+
+function changeURlParams(params) {
+    const url = new URL(window.location.href);
+    const searchParams = new URLSearchParams(url.search);
+    for (const [key, value] of Object.entries(params)) {
+        searchParams.set(key, value);
+    }
+    window.history.pushState({}, '', `${url.origin}${url.pathname}?${searchParams.toString()}`);
+}
+
+function getAlgSupportTabContent() {
+    document.querySelector('.load-more-spinner').removeAttribute('hidden');
+    document.querySelector('.alg-next-page-btn').setAttribute('hidden', 'true');
+    const razerSupportDataElemet = document.querySelector('.razer-support-results');
+    const [supportLanguage, algSupportcountry] = (document.querySelector('cx-storefront')?.getAttribute('data-language'))?.toLowerCase().split('_');
+    const headerOptions = {
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            RAZER_OSC_AUTH_BASIC: razerSupportDataElemet.getAttribute('data-support-header'),
+        },
+        method: 'POST',
+        body: JSON.stringify(
+            {
+                term: currentPageQuery(),
+                limit: algSupportLimit,
+                offset: algSupportOffset,
+                country: algSupportcountry,
+                language: supportLanguage,
+                service: "kb-srch"
+            }
+        ),
+    };
+    const razerSupportUrl = razerSupportDataElemet.getAttribute('data-support-url');
+    fetch(razerSupportUrl, headerOptions)
+        .then(response => response.json())
+        .then(supportInfo => {
+            const tabContentElement = document.querySelector('#alg-search-page-container tabset .tab-content .tab-pane.active');
+            const supportTotalResult = supportInfo?.detail?.split('|')?.[0];
+            const supportResultCountElement = document.querySelector('.support-total-results');
+            const supportLoadMoreButton = document.querySelector('.alg-next-page-btn');
+            supportResultCountElement.removeAttribute('hidden');
+            if (!supportTotalResult || supportTotalResult === '0') {
+                const resultConutMessage = supportResultCountElement.querySelector('span').getAttribute('data-empty');
+                supportResultCountElement.querySelector('span').innerHTML = resultConutMessage;
+                document.querySelector('.razer-support-empty-results').removeAttribute('hidden');
+            } else {
+                let resultConutMessage = supportResultCountElement.querySelector('span').getAttribute('data-singular');
+                if (supportTotalResult !== '1') {
+                    resultConutMessage = supportResultCountElement.querySelector('span').getAttribute('data-plural');
+                    resultConutMessage = resultConutMessage.replace('0000', supportTotalResult);
+                }
+
+                supportResultCountElement.querySelector('span').innerHTML = resultConutMessage;
+                const supportListHrml = getAlgSupportHtml(supportInfo.data);
+                const supportResultElement = tabContentElement.querySelector('.razer-support-results');
+                const currrentSupportCount = document.querySelectorAll('.razer-support-results > div').length;
+
+                supportResultElement.innerHTML = supportResultElement.innerHTML + supportListHrml;
+                supportResultElement.removeAttribute('hidden');
+                algSupportOffset = algSupportOffset + algSupportLimit;
+
+                if (parseInt(supportTotalResult) > algSupportOffset) {
+                    const loadMoreUserButton = supportLoadMoreButton.querySelector('button');
+                    let remainingResults = parseInt(supportTotalResult) - algSupportOffset;
+                    remainingResults = remainingResults > algSupportLimit ? algSupportLimit : remainingResults;
+                    loadMoreUserButton.innerHTML = loadMoreUserButton.getAttribute('data-translate')?.replace('algCount', remainingResults);
+                    supportLoadMoreButton.removeAttribute('hidden');
+                }
+
+                if (currrentSupportCount) {
+                    setTimeout(() => {
+                        document.querySelector('.razer-support-results > div:nth-child(' + (currrentSupportCount + 1) + ') a')?.focus();
+                    }, 1000);
+                }
+            }
+            document.querySelector('.load-more-spinner').setAttribute('hidden', 'true');
+        })
+        .catch(error => {
+            document.querySelector('.load-more-spinner').setAttribute('hidden', 'true');
+        });
+}
+
+function getAlgNewsroomTabContent() {
+
+    document.querySelector('#newsroom-tab').removeAttribute('hidden');
+    document.querySelector('#newsroom-tab .load-more-spinner').removeAttribute('hidden');
+    document.querySelector('#newsroom-tab .alg-next-page-btn').setAttribute('hidden', 'true');
+    const razerNewsroomDataElement = document.querySelector('.razer-newsroom-results');
+    const newsroomResultCountElement = document.querySelector('#newsroom-tab .newsroom-total-results');
+    const [newsroomLanguage, algNewsroomCountry] = (document.querySelector('cx-storefront')?.getAttribute('data-language'))?.toLowerCase().split('_');
+    const headerOptions = {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+        }
+    };
+    if(!razerNewsroomDataElement.getAttribute('data-newsroom-url')) {
+        document.querySelector('#newsroom-tab .load-more-spinner').setAttribute('hidden', 'true');
+        console.error('Razer Newsroom URL is not defined');
+        return;
+    }
+    let searchCriteriaPage = 1;
+    if(+newsroomResultCountElement.querySelector('span').getAttribute('data-total-pages') > 0) {
+        searchCriteriaPage = Math.ceil(razerNewsroomDataElement.children.length / algNewsroomLimit) + 1
+    }
+    const searchCriteria = {
+        term: currentPageQuery(),
+        limit: algNewsroomLimit,
+        page: searchCriteriaPage,
+        country: algNewsroomCountry,
+        language: newsroomLanguage
+    }
+
+    const razerNewsroomUrl = new URL(`${razerNewsroomDataElement.getAttribute('data-newsroom-url')}search`);
+    razerNewsroomUrl.searchParams.append('search', searchCriteria.term??"");
+    razerNewsroomUrl.searchParams.append('_embed', '');
+    razerNewsroomUrl.searchParams.append('per_page',`${ searchCriteria.limit}`);
+    if(searchCriteria.page) razerNewsroomUrl.searchParams.append('page', `${searchCriteria.page}`);
+
+    let newsroomTotalResult = 0;
+
+    fetch(razerNewsroomUrl, headerOptions)
+        .then(response => {
+            newsroomTotalResult = parseInt(response.headers.get('X-WP-Total') || '0');
+            return response.json()
+        })
+        .then(newsroomInfo => {
+            const tabContentElement = document.querySelector('#alg-search-page-container tabset .tab-content .tab-pane.active');
+            const newsroomLoadMoreButton = document.querySelector('#newsroom-tab .alg-next-page-btn');
+            const newsroomResultElement = tabContentElement.querySelector('.razer-newsroom-results');
+            const newsroomResultCountElement = document.querySelector('#newsroom-tab .newsroom-total-results');
+            const currrentNewsroomCount = document.querySelectorAll('.razer-newsroom-results > div').length;
+
+            // Update result count and handle empty results
+            updateNewsroomResultCount(newsroomResultCountElement, newsroomTotalResult);
+
+            if (!newsroomTotalResult || newsroomTotalResult == '0') {
+                handleEmptyNewsroomResults(newsroomResultCountElement);
+                return;
+            }
+
+            // Update newsroom results
+            const newsroomListHtml = getAlgNewsroomHtml(newsroomInfo);
+            newsroomResultElement.innerHTML += newsroomListHtml;
+            newsroomResultElement.removeAttribute('hidden');
+
+            // Handle "Load More" button
+            updateLoadMoreButton(newsroomLoadMoreButton, newsroomTotalResult, newsroomResultElement.children.length);
+
+            // Focus on the next result
+            focusNextNewsroomResult(currrentNewsroomCount);
+        })
+        .catch(error => {
+            console.warn('Error fetching newsroom data:', error);
+        }).finally(() => {
+            document.querySelector('#newsroom-tab .load-more-spinner').setAttribute('hidden', 'true');
+        });
+
+}
+
+function updateNewsroomResultCount(element, totalResults) {
+    element.querySelector('span').setAttribute('data-total-results', totalResults);
+    element.querySelector('span').setAttribute('data-total-pages', totalResults);
+    
+    let resultConutMessage = element.querySelector('span').getAttribute('data-singular');
+    if (totalResults !== '1') {
+        resultConutMessage = element.querySelector('span').getAttribute('data-plural');
+        resultConutMessage = resultConutMessage.replace('0000', totalResults);
+    }
+    
+    element.querySelector('span').innerHTML = resultConutMessage;
+    
+    element.removeAttribute('hidden');
+}
+
+function handleEmptyNewsroomResults(element) {
+    const emptyMessage = element.querySelector('span').getAttribute('data-empty');
+    element.querySelector('span').innerHTML = emptyMessage;
+    document.querySelector('.razer-newsroom-empty-results').removeAttribute('hidden');
+}
+
+function updateLoadMoreButton(button, totalResults, currentResults) {
+    if (totalResults > currentResults) {
+        const loadMoreUserButton = button.querySelector('button');
+        let remainingResults = totalResults - currentResults;
+        remainingResults = Math.min(remainingResults, algNewsroomLimit);
+        loadMoreUserButton.innerHTML = loadMoreUserButton.getAttribute('data-translate')?.replace('algCount', remainingResults);
+        button.removeAttribute('hidden');
+    }
+}
+
+function focusNextNewsroomResult(currentCount) {
+    if (currentCount) {
+        setTimeout(() => {
+            document.querySelector(`.razer-newsroom-results > div:nth-child(${currentCount + 1}) a`)?.focus();
+        }, 1000);
+    }
+}
+
+function getAlgSupportHtml(data) {
+    let supportHtml = '';
+    if (data && data.length > 0) {
+        data.forEach(article => {
+            let descriptionText = article.Question || article.Description;
+            descriptionText = descriptionText.replace(/<div>|<\/div>|<p>|<\/p>/gmi, '');
+            supportHtml += `
+                <div class="col-12 supportItem">
+                    <h3 class="mb-2"><a href="${article.Link}" class="text-white">
+                            ${article.Summary || article.Question}
+                        </a></h3>
+                    <p class="mb-2 text-grey">${descriptionText}</p>
+                    <a href="${article.Link}" class="supportItem-link">${article.Link}</a>
+                </div>
+            `;
+        });
+    }
+    return supportHtml;
+}
+
+function getAlgNewsroomHtml(data) {
+    let newsroomHtml = '';
+    if (data && data.length > 0) {
+        data.forEach(article => {
+            const [embedded] = article._embedded.self;
+            let excerptText = embedded?.excerpt?.rendered || '';
+            excerptText = excerptText
+                .replace(/<p>|<\/p>|\\n/gmi, '');
+            newsroomHtml += `
+                <div class="col-12 newsroomItem">
+                    <h3 class="mb-2"><a href="${article.url}" class="text-white">
+                            ${article.title}
+                        </a></h3>
+                    <p class="mb-2 text-grey">${excerptText}</p>
+                    <a href="${article.url}" class="newsroomItem-link">${article.url}</a>
+                </div>
+            `;
+        });
+    }
+    return newsroomHtml;
+}
+
+function initAlgViewSwitchEvnets() {
+    algSortToggleButton = document.querySelector('.razer-custom-sort .trigger');
+    const viewModeElements = document.querySelectorAll('app-razer-search-view .view-modes button');
+    viewModeElements?.forEach(eventElement => {
+        eventElement.addEventListener('click', (e) => {
+            viewModeElements.forEach(queryElement => {
+                queryElement.removeAttribute('aria-current');
+                queryElement.classList.remove('view-mode-disabled');
+            });
+            e.target.setAttribute('aria-current', 'true');
+            e.target.classList.add('view-mode-disabled');
+            const modeSwitchClassElement = document.querySelector('#alg-search-page-products');
+            if (e.target.classList.contains('view-mode-list')) {
+                modeSwitchClassElement.classList.add('alg-view-list');
+            } else {
+                modeSwitchClassElement.classList.remove('alg-view-list');
+            }
+        })
+    });
+}
+
+function initAlgSortDropdownEvnets() {
+    document.querySelector('.razer-custom-sort .trigger').addEventListener('click', (e) => {
+        alSortToggleDropDown(e);
+    });
+    document.querySelector('.razer-custom-sort .trigger').addEventListener('keydown', (e) => {
+        algSortKeyEvents(e);
+    });
+    algSortGetAllOptions().forEach(option => {
+        option.addEventListener('click', (e) => {
+            algSortSelectOption(e.target);
+        });
+        option.addEventListener('keydown', (e) => {
+            algSortOptionsKeyEvents(e);
+        });
+    });
+}
+
+function isAlgSortExpanded() {
+    return document.querySelector('.razer-custom-sort .razer-custom-select')?.classList.contains('expanded');
+}
+
+function alSortToggleDropDown(e) {
+    if (isAlgSortExpanded()) {
+        algSortCollapseOptions();
+        e?.target?.focus();
+    } else {
+        algSortExpandOptions();
+    }
+}
+
+function algSortCollapseOptions() {
+    algSortToggleButton.setAttribute('aria-expanded', false);
+    algSortCollapse();
+    algSortGetOptionsElement().classList.remove('is-visible');
+}
+
+function algSortGetOptionsElement() {
+    return document.querySelector('.razer-custom-select .razer-custom-select-options');
+}
+
+function algSortGetAllOptions() {
+    return document.querySelectorAll('.razer-custom-select .razer-custom-select-options li');
+}
+
+function algSortExpandOptions() {
+    algSortToggleButton.setAttribute('aria-expanded', true);
+    algSortExpand();
+    algSortGetOptionsElement().classList.add('is-visible');
+}
+
+function algSortExpand() {
+    document.querySelector('.razer-custom-sort .razer-custom-select')?.classList.add('expanded');
+}
+
+function algSortCollapse() {
+    document.querySelector('.razer-custom-sort .razer-custom-select')?.classList.remove('expanded');
+}
+
+function algSortSelectOption(optionSelected, focus = false) {
+    const value = optionSelected.getAttribute('data-value');
+    if (focus) {
+        optionSelected.focus();
+    } else {
+        algSortToggleButton.focus();
+        algSortToggleButton.setAttribute('aria-activedescendant', optionSelected.getAttribute('id'));
+        document.querySelector('#razer-custom-select-selected-text').innerText = optionSelected.innerText;
+        document.querySelector('#razer-custom-select-hidden-field').value = value;
+        document.dispatchEvent(new CustomEvent('algSort', {
+            detail: value
+        }));
+        algSortGetAllOptions().forEach(option => {
+            option.removeAttribute('aria-selected');
+        });
+        optionSelected.setAttribute('aria-selected', 'true');
+        setTimeout(() => {
+            algSortCollapseOptions();
+        }, 100);
+    }
+}
+
+function algSortSelectFirstOption() {
+    const firstOption = algSortGetAllOptions()[0];
+    algSortSelectOption(firstOption);
+}
+
+function selectLastOption() {
+    const lastOption = algSortGetAllOptions()[algSortGetAllOptions().length - 1];
+    algSortSelectOption(lastOption);
+}
+
+function algSortFocusOption(i, direction) {
+    if (i && i.srcElement && i.srcElement.nextElementSibling && direction === 'down') {
+        i.srcElement.nextElementSibling.focus();
+    } else if (i && i.srcElement && i.srcElement.previousElementSibling && direction === 'up') {
+        i.srcElement.previousElementSibling.focus();
+    }
+}
+
+function algSortCloseSortDropDown(e) {
+    if (e) {
+        e.preventDefault();
+        algSortCollapseOptions();
+    }
+}
+
+function selectNextOption(focus) {
+    const currentOption = document.getElementById(algSortToggleButton.getAttribute('aria-activedescendant'));
+
+    if (currentOption !== undefined) {
+        const currentOptionIndex = Array.prototype.slice.call(algSortGetAllOptions()).indexOf(currentOption);
+
+        if (currentOptionIndex + 1 < algSortGetAllOptions().length) {
+            const nextOption = algSortGetAllOptions()[currentOptionIndex + 1];
+            algSortSelectOption(nextOption, focus);
+        }
+    }
+}
+
+function selectPreviousOption(focus) {
+    const currentOption = document.getElementById(algSortToggleButton.getAttribute('aria-activedescendant'));
+
+    if (currentOption !== undefined) {
+        const currentOptionIndex = Array.prototype.slice.call(algSortGetAllOptions()).indexOf(currentOption);
+
+        if (currentOptionIndex - 1 >= 0) {
+            const previousOption = algSortGetAllOptions()[currentOptionIndex - 1];
+            algSortSelectOption(previousOption, focus);
+        }
+    }
+}
+
+function algSortKeyEvents(e) {
+    switch (e.key) {
+        case 'ArrowUp':
+            e.preventDefault();
+            selectPreviousOption(isAlgSortExpanded());
+            break;
+
+        case 'ArrowDown':
+            e.preventDefault();
+            selectNextOption(isAlgSortExpanded());
+            break;
+
+        case 'Home':
+            if (isAlgSortExpanded()) {
+                algSortSelectFirstOption();
+            }
+            break;
+
+        case 'End':
+            if (isAlgSortExpanded()) {
+                selectLastOption();
+            }
+            break;
+
+        case 'Tab':
+            algSortCollapseOptions();
+            break;
+
+        case 'Escape':
+        case 'Enter':
+            if (isAlgSortExpanded()) {
+                e.preventDefault();
+                algSortCollapseOptions();
+            }
+            break;
+    }
+}
+
+function algSortOptionsKeyEvents(e) {
+    switch (e.key) {
+        case 'Escape':
+            algSortCloseSortDropDown(e);
+            break;
+
+        case 'ArrowUp':
+        case 'ArrowLeft':
+            e.preventDefault();
+            algSortFocusOption(e, 'up');
+            break;
+
+        case 'ArrowDown':
+        case 'ArrowRight':
+            e.preventDefault();
+            algSortFocusOption(e, 'down');
+            break;
+
+        case 'Home':
+            if (isAlgSortExpanded()) {
+                algSortSelectFirstOption();
+            }
+            break;
+
+        case 'End':
+            if (isAlgSortExpanded()) {
+                selectLastOption();
+            }
+            break;
+
+        case 'Enter':
+        case 'Space':
+            algSortSelectOption(e.srcElement);
+            break;
+    }
+}
+
+function initCarouselEvents() {
+    document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-next')?.addEventListener('click', () => {
+        setActiveSlide(currentSlide + 1);
+    });
+
+    document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-next')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            setActiveSlide(currentSlide + 1);
+        }
+    });
+
+    document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-prev')?.addEventListener('click', () => {
+        setActiveSlide(currentSlide - 1);
+    });
+
+    document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-prev')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setActiveSlide(currentSlide - 1);
+        }
+    });
+    createCarousel();
+    window.addEventListener('resize', () => {
+        createCarousel();
+    });
+}
+
+function createCarousel() {
+    currentSlide = 0;
+    document.querySelector('.reference-carousel:not(.recommentation-carousel):not(.carousel-modal) .carousel-wrap')?.scrollTo({ left: 0, behavior: 'smooth' });
+    document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-wrap ul.ssr-reference-carousel')?.remove();
+    if (isMobileView() && !isTabletView()) {
+        document.querySelector('app-razer-search-algolia app-razer-carousel .reference-carousel')?.classList.remove('recommentation-carousel');
+        document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-wrap ul:not(.ssr-reference-carousel)')?.classList.remove('d-none');
+    } else {
+        document.querySelector('app-razer-search-algolia app-razer-carousel .reference-carousel')?.classList.add('recommentation-carousel');
+        document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-wrap ul:not(.ssr-reference-carousel)')?.classList.add('d-none');
+        const carouselSlides = getSlotsPerSlideCount();
+        const allSlides = document.querySelectorAll('app-razer-search-algolia app-razer-carousel .carousel-wrap ul:not(.ssr-reference-carousel) > li');
+        if (!document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-wrap > ul.ssr-reference-carousel')) {
+            const listElement = document.createElement('ul');
+            listElement.classList.add('ssr-reference-carousel');
+            document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-wrap').appendChild(listElement);
+            const carouselElement = document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-wrap > ul.ssr-reference-carousel');
+            const oldCarouselElement = document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-wrap ul:not(.ssr-reference-carousel)');
+            carouselElement.innerHTML = oldCarouselElement.innerHTML;
+            for (let i = (allSlides.length - 1); i >= carouselSlides; i--) {
+                document.querySelectorAll('app-razer-search-algolia app-razer-carousel .carousel-wrap ul.ssr-reference-carousel > li')[i]?.remove();
+            }
+
+            document.querySelectorAll('app-razer-search-algolia app-razer-carousel .carousel-wrap ul.ssr-reference-carousel > li').forEach(e => {
+                const imagePath = e.querySelector('.carousel-image img')?.getAttribute('src');
+                e.querySelector('.carousel-image').style.setProperty('background-image', 'url(' + imagePath + ')');
+            });
+        }
+    }
+    resetCarouselNavs();
+}
+
+function updateCarouselElements() {
+    if (isMobileView() && !isTabletView()) {
+        const slideOffset = document.querySelectorAll('.reference-carousel:not(.recommentation-carousel):not(.carousel-modal) .carousel-wrap > ul:not(.ssr-reference-carousel) > li')?.[currentSlide]?.offsetLeft;
+        document.querySelector('.reference-carousel:not(.recommentation-carousel):not(.carousel-modal) .carousel-wrap')?.scrollTo({ left: (slideOffset - 16), behavior: 'smooth' });
+    } else {
+        document.querySelectorAll('app-razer-search-algolia app-razer-carousel .carousel-wrap ul:not(.ssr-reference-carousel) > li').forEach(e => {
+            const slidePosition = Number(e.getAttribute('data-slide'));
+            if (isSlideVisible(slidePosition)) {
+                e.removeAttribute('aria-hidden');
+            } else {
+                e.setAttribute('aria-hidden', 'true');
+            }
+        });
+
+        let i = 0;
+        document.querySelectorAll('app-razer-search-algolia app-razer-carousel .carousel-wrap ul:not(.ssr-reference-carousel) > li:not([aria-hidden=true])').forEach(e => {
+            const infoHtml = e.querySelector('.carousel-info').innerHTML
+            const updateElement = document.querySelectorAll('app-razer-search-algolia app-razer-carousel .carousel-wrap ul.ssr-reference-carousel > li')[i];
+            if (updateElement) {
+                updateElement.querySelector('.carousel-info').innerHTML = infoHtml;
+                const imagePath = e.querySelector('.carousel-image img')?.getAttribute('src');
+                updateElement.querySelector('.carousel-image').style.setProperty('background-image', 'url(' + imagePath + ')');
+            }
+            i++;
+        });
+    }
+
+    resetCarouselNavs();
+}
+
+function resetCarouselNavs() {
+    if ((totalSlides() - getSlotsPerSlideCount()) <= currentSlide) {
+        document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-next').setAttribute('disabled', 'true');
+    } else {
+        document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-next').removeAttribute('disabled');
+    }
+
+    if (currentSlide === 0) {
+        document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-prev').setAttribute('disabled', 'true');
+    } else {
+        document.querySelector('app-razer-search-algolia app-razer-carousel .carousel-nav-prev').removeAttribute('disabled');
+    }
+}
+
+function totalSlides() {
+    return document.querySelectorAll('app-razer-search-algolia app-razer-carousel .carousel-wrap ul:not(.ssr-reference-carousel) > li').length;
+}
+
+function setActiveSlide(i) {
+    currentSlide = i;
+    updateCarouselElements();
+}
+
+function getSlotsPerSlideCount() {
+    const currentWindow = document.body.clientWidth;
+    let slotsPerSlide = 4;
+    if (currentWindow <= 767) {
+        slotsPerSlide = 1;
+    } else if (currentWindow >= 768 && currentWindow <= 1199) {
+        slotsPerSlide = 3;
+    }
+
+    return slotsPerSlide;
+}
+
+function isSlideVisible(i) {
+    const slotsPerSlide = getSlotsPerSlideCount();
+    if (i >= currentSlide && i < (currentSlide + slotsPerSlide)) {
+        return true
+    }
+
+    return false;
+}

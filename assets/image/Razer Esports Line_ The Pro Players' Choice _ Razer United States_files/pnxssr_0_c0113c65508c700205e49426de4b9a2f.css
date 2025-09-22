@@ -1,0 +1,50 @@
+#bsv3pro-niko-mcd {margin-bottom: 6.25rem;}
+#bsv3pro-niko-mcd .content-position{display: grid;}
+#bsv3pro-niko-mcd .content_text_1{grid-row: 2;margin-top: 1rem!important;background: none!important;font-family: Roboto, sans-serif!important;font-size: 1rem!important;font-weight: 300!important;}
+#bsv3pro-niko-mcd .content_text_1 .quote-open,
+#bsv3pro-niko-mcd .content_text_1 .quote-close{display: none!important;}
+#bsv3pro-niko-mcd .content_text_2{grid-row: 1;}
+#bsv3pro-niko-mcd .content_text_2 blockquote::before, .content_text_2 blockquote::after {color: #44d62c!important;}
+#bsv3pro-niko-mcd .content_text_2 blockquote::before{font-size: 11rem;vertical-align: 0;margin: 0;position: absolute;left: -100px;top: 2.5rem;}
+#bsv3pro-niko-mcd .content_text_2 blockquote::after{font-size: 5rem;vertical-align: -0.35em;}
+#bsv3pro-niko-mcd .content_text_2 blockquote,
+#bsv3pro-niko-mcd .content_text_2 strong{color: #fff;}
+#bsv3pro-niko-mcd .content_text_2 strong{font-weight: 400; font-size: 1.375rem;}
+#bsv3pro-niko-mcd .content_text_2 blockquote{font-size: 2rem;line-height: 2.5rem;font-weight: 500;text-transform: uppercase;font-family:RazerF5,Arial,sans-serif;position: relative;margin-bottom: 1rem;}
+#bsv3pro-niko-mcd .content_text_2 span{display: block; text-transform: uppercase;}
+#bsv3pro-niko-mcd .content_text_2 .award {color: #46dd2c; margin-top: 1rem; font-size: 13px;}
+#bsv3pro-niko-mcd .content_text_2 img{max-width: 190px!important;}
+#bsv3pro-niko-mcd .content_text_2 a{display: block;margin-top: 1rem;}
+@media (max-width: 767px) {
+	#bsv3pro-niko-mcd {margin-bottom:3rem; padding-top: 0 !important;}	
+  #bsv3pro-niko-mcd .content-position{padding:1.5rem 0.5rem}
+	#bsv3pro-niko-mcd .content_text_2 blockquote {
+		font-size: 1.75rem;line-height: 1.2;
+		margin: 0 0 10px;
+	}
+	#bsv3pro-niko-mcd .content_text_2 blockquote br {display: none;}
+	#bsv3pro-niko-mcd .content_text_2 blockquote::before{font-size: 5rem;position: relative;left: 0;top: 2rem;}
+	#bsv3pro-niko-mcd .content_text_2 span.award {margin-top: 10px;}
+	#bsv3pro-niko-mcd .img-lifeStyle {margin-left: 0; max-width: 100%; width: 100%;}
+}
+#bsv3pro-niko-mcd .content_text_2 span.rzr-green{color:#44d62c; margin-bottom: 0;}
+#bsv3pro-niko-mcd {margin-bottom: 1rem!important;}
+ @media screen and (max-width:767px){#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_2]{min-height:700px;display:flex;align-items:top;padding:7rem 0 0;background-image:url(//assets2.razerzone.com/images/pnx.assets/538ef45b423015b9bd34cf5c2c6d3d5e/razer-blackshark-v3-pro-niko-desktop.webp);}#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_11]{max-width:460px;padding:0;font-size:1.125rem;color:#999;margin:0;}} @media screen and (-webkit-max-device-pixel-ratio: 1) and (min-width: 1200px), screen and (min-width: 768px) and (max-width: 1200px){#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_2]{min-height:700px;display:flex;align-items:top;padding:7rem 0 0;background-image:url(//assets2.razerzone.com/images/pnx.assets/538ef45b423015b9bd34cf5c2c6d3d5e/razer-blackshark-v3-pro-niko-desktop.webp);}#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_11]{max-width:460px;padding:0;font-size:1.125rem;color:#999;margin:0;}} @media screen and (-webkit-min-device-pixel-ratio: 1) and (min-width: 1200px){#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_2]{min-height:700px;display:flex;align-items:top;padding:7rem 0 0;background-image:url(//assets2.razerzone.com/images/pnx.assets/538ef45b423015b9bd34cf5c2c6d3d5e/razer-blackshark-v3-pro-niko-desktop.webp);}#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_11]{max-width:460px;padding:0;font-size:1.125rem;color:#999;margin:0;}} @media screen and (-webkit-min-device-pixel-ratio: 1.5) and (min-width: 1200px){#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_2]{min-height:700px;display:flex;align-items:top;padding:7rem 0 0;background-image:url(//assets2.razerzone.com/images/pnx.assets/538ef45b423015b9bd34cf5c2c6d3d5e/razer-blackshark-v3-pro-niko-desktop.webp);}#pnxssr_af9a7e386c590cb0b51b5f6b572ebadb div[pnxssr_11]{max-width:460px;padding:0;font-size:1.125rem;color:#999;margin:0;}}
+@font-face {
+        font-family: 'star_jediregular';
+        src: url('https://assets2.razerzone.com/images/razer-viper/starjedi-webfont.woff2') format('woff2'),
+             url('https://assets2.razerzone.com/images/razer-viper/starjedi-webfont.woff') format('woff');
+        font-weight: normal;
+        font-style: normal;
+            }
+            blockquote::before,
+        blockquote::after {
+          font-family: 'star_jediregular', Arial, sans-serif;
+          color: #44D62C;
+          font-size: 4rem;
+            line-height: .1em;
+        }
+        blockquote::before{ content: '“';
+            margin-right: .05em;
+            vertical-align: -.5em;}
+        blockquote::after{ content: '”'; vertical-align: -.5em;}

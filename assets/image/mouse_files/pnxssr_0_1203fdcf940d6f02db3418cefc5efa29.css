@@ -1,0 +1,11 @@
+#list-pros .bo-temp img{width: 170px;}
+/*#list-pros .bo-temp{background-color: #222;padding-top: 6.25rem;padding-bottom: 4.25rem;}*/
+#list-pros .bo-temp a{font-size: 0.875rem;display: inline-block;margin: 2rem 0.4rem 0;vertical-align: top;text-decoration: none;}
+#list-pros .bo-temp a:hover{text-decoration: none;}
+#list-pros .bo-temp span:not(.pnx-link-arrow) {display: block;color:#fff;font-size: 1.125rem;padding-top: 1rem;}
+#list-pros .bo-temp br{display: none;}
+.noClick{cursor: auto;pointer-events: none;}
+@media (max-width: 768px) {
+	/*#list-pros .bo-temp{padding-top: 3rem;padding-bottom: 2rem;}*/
+}
+ @media screen and (max-width:767px){} @media screen and (-webkit-max-device-pixel-ratio: 1) and (min-width: 1200px), screen and (min-width: 768px) and (max-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1) and (min-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1.5) and (min-width: 1200px){}

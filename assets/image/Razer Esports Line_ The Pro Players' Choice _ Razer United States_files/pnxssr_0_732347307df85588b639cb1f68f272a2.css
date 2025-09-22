@@ -1,0 +1,25 @@
+#tab-headset-technology .content .header {font-size: 2.25rem;}
+#tab-headset-technology .header {color: #fff;}
+#tab-headset-technology .icons ul li {row-gap: 2rem;}
+#tab-headset-technology .icons ul li img {max-width: 180px;}
+@media (min-width: 769px) and (max-width: 817px) {
+	[lang="es-ES"] #tab-headset-technology .header, [lang="es-MX"] #tab-headset-technology .header{ height: 120px; }
+}
+@media (min-width: 992px) {
+	#tab-headset-technology .header { height: 72px; }
+	[lang="zh-HK"] #tab-headset-technology .header, 
+	[lang="zh-TW"] #tab-headset-technology .header, 
+	[lang="ko-KR"] #tab-headset-technology .header {height: 48px;}
+	[lang="fr-CA"] #tab-headset-technology .header, [lang="fr-FR"] #tab-headset-technology .header{ height: 96px; }
+}
+@media (min-width: 1200px) {	
+	[lang="zh-CN"] #tab-headset-technology .header {height: 48px;}
+	[lang="es-ES"] #tab-headset-technology .header, [lang="es-MX"] #tab-headset-technology .header{ height: 72px; }
+}
+@media (min-width: 600px) and (max-width: 768px) {
+	#tab-headset-technology .header br:first-child {display: none;}
+}
+@media (max-width: 768px) {
+	#tab-headset-technology .content .header {font-size: 1.875rem;}
+}
+ @media screen and (max-width:767px){} @media screen and (-webkit-max-device-pixel-ratio: 1) and (min-width: 1200px), screen and (min-width: 768px) and (max-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1) and (min-width: 1200px){} @media screen and (-webkit-min-device-pixel-ratio: 1.5) and (min-width: 1200px){}

@@ -1,0 +1,122 @@
+/* :where(*){
+    margin:0;
+    padding:0;
+    box-sizing: border-box;
+} */
+
+
+ul li{
+    position: relative;
+  
+}
+nav{
+    position: relative;
+}
+nav ul{
+    height: 70px;
+}
+
+nav li::before{
+    content: "";
+    position: absolute;
+    top: 180%;
+    width:0;
+    height: 2px;
+    background-color: white;
+}
+nav li:hover::before{
+    width: 100%;
+}
+
+#pp span{
+    position: relative;
+}
+#pp span::before{
+    content: "";
+    position: absolute;
+    background-color:#44d62d;
+    bottom:0;
+    width: 100%;
+    height: 2px;
+}
+
+#img img{
+    height: 180px;
+}
+footer ul li{
+    color: gray;
+    transition: all 0.4s ease;
+    cursor: pointer;
+    font-size: 12px;
+}
+footer ul{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+footer ul li:hover{
+    color: whitesmoke;
+}
+
+
+/* #bg{
+    width: 100%;
+    height: 453px;
+    background-image: url(assets/image/Mobo_-_Refurb_Sale_b57c9667-6636-443b-a941-cdcc4ad21f09.webp);
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+} */
+
+
+/* .btnn{
+    position: relative;
+    display: inline-block;
+    padding: 0.75rem 2rem;
+    color: white;
+    background: black;
+    border: 1.5px solid white;
+    font-weight: 600;
+    border-radius:0.5rem;
+    cursor: pointer;
+    margin: 15rem auto;
+    transition: all 0.5s ease;
+    overflow: hidden;
+}
+.btnn::before{
+    content: "";
+    position: absolute;
+    left: -100%;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    z-index: 0;
+     border: 1.5px solid black;
+     transition: all 0.5s ease;
+     border-radius: 0.5rem;
+
+}
+.btnn:hover::before{
+    left: 0;
+    border: 1.5px solid black;
+}
+.btnn:hover{
+color: black;
+border-radius: 0.5rem;
+
+
+}
+.btnf{
+    position: relative;
+    top: 15rem;
+    width: 100%;
+    height: 90px;
+    display: flex;
+    justify-content: center;
+    align-items:center;
+}
+.btnf .btnn span{
+    position: relative;
+    z-index: 1;
+} */

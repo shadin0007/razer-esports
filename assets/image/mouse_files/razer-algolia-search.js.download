@@ -1,0 +1,1804 @@
+const razerRecentSearches = 'Razer_Recent_Searches';
+const recommentCategory = 'category';
+const searchProductsSelector = '#alg-search-page-products';
+const topSuggestionsSelector = '#alg-top-suggestions';
+const razerSsrItemsCountPerSlide = 4;
+const searchPageSuggestions = '#alg-search-query-suggestions';
+const algSearchEventDataKey = 'RAZER_ALGOLIA_SEARCH_DATA';
+let algoliaAppId = '';
+let algoliaApi = '';
+let facetsEnabled;
+let minimumCharactersToSearch = 3;
+let search;
+let algSearch;
+let algMainIndex = '';
+let algQuerySuggestionIndex = '';
+let algConfigIndex = '';
+let searchClient;
+let currentCurrency = '';
+let currentSite = ''
+let currentLanguage = '';
+let currentUserData;
+let defaultFacetExpansion;
+let insightInitialized = false;
+let algSearchWidgetInitialized = false;
+let searchPageFacetRendered = false;
+let searchPageCurrentIndex = '';
+let razerSsrCurrentPage = 0;
+let algCongigInitialized;
+let algSearchPageInstantSearch;
+let algNotifyMeEventData;
+let trendingFacets;
+
+(function () {
+    initAlgEvents();
+    resetAlgoliaStoredData();
+})();
+
+function initAlgEvents() {
+    document.addEventListener('openAlgSerachWidget', () => {
+        initiAlgSearchWidget();
+        validateUserType();
+        toggleAlgoliaSearchWidget();
+    });
+
+    initSearchIconClick();
+    document.addEventListener('initAlgSerachWidget', () => {
+        initSearchIconClick();
+    });
+
+    document.addEventListener('initAlgSerachPage', () => {
+        setAlgConfigs();
+        setAlgSearchClient();
+        setAlgSearchPageEvents();
+        getAlgoliaConfigurations(true);
+
+        if (isMobileView()) {
+            const filterElement = document.querySelector('.alg-search-filters');
+            filterElement?.setAttribute('role', 'dialog');
+            filterElement?.setAttribute('aria-modal', 'true');
+            filterElement?.setAttribute('aria-label', 'Filter');
+        }
+    });
+
+    document.addEventListener('sendAlgAtcEvent', (e) => {
+        setAlgConfigs();
+        initInsights();
+
+        if (e.detail) {
+            algEventAddToCart({
+                objectIDs: [e.detail]
+            });
+        }
+    });
+
+    document.addEventListener('sendAlgPurchaseEvent', (e) => {
+        setAlgConfigs();
+        initInsights();
+
+        if (e.detail) {
+            algEventPurchase(e.detail);
+        }
+    });
+}
+
+function initSearchIconClick() {
+    document.querySelector('#razer-search-menu')?.addEventListener('click', (e) => {
+        if (document.querySelector('.algolia-enabled')) {
+            initiAlgSearchWidget();
+            validateUserType();
+            toggleAlgoliaSearchWidget();
+        }
+    });
+
+    document.querySelector('#razer-search-menu')?.addEventListener('keydown', (e) => {
+        if (document.querySelector('.algolia-enabled') && isMobileView() && e.key === 'Tab' && e.shiftKey) {
+            e.preventDefault();
+        }
+    });
+
+    document.querySelector('#icon-nav-cart .icon-cart')?.addEventListener('focus', (e) => {
+        if (!isMobileView() && document.querySelector('.alg-search-enabled #razer-search-menu[aria-expanded="true"]')) {
+            document.querySelector('#main-nav-search-input').focus();
+        }
+    });
+}
+
+function setAlgSearchPageEvents() {
+    const currentQuery = currentPageQuery();
+
+    document.addEventListener('algSort', (e) => {
+        setAlgSort(e.detail);
+    });
+
+    document.querySelector('.toggle-alg-input').value = currentQuery?.toLowerCase();
+
+    document.querySelector('.toggle-alg-input')?.addEventListener('focus', (e) => {
+        document.querySelector(searchPageSuggestions)?.classList.remove('d-none');
+        document.querySelector('.toggle-alg-input').setAttribute('aria-expanded', 'true');
+        const currentQuery = e.target.value;
+        if (!document.querySelector(searchPageSuggestions + ' input') && (currentQuery?.length >= minimumCharactersToSearch)) {
+            createSearchPageInputBox(currentQuery);
+        } else if (currentQuery?.length < minimumCharactersToSearch) {
+            document.querySelector(searchPageSuggestions)?.classList.add('d-none');
+            document.querySelector('.toggle-alg-input').setAttribute('aria-expanded', 'false');
+            document.querySelector('.alg-page-input-count').innerHTML = '';
+        }
+    });
+
+    document.querySelector('.toggle-alg-input')?.addEventListener('keypress', (e) => {
+        const currentSearchQuery = e?.target?.value;
+        if (currentSearchQuery && e.key === "Enter") {
+            e.preventDefault();
+            updateRecentSearchAndShowSearchPage(currentSearchQuery, '', getSearchResultPageUrl(currentSearchQuery));
+        }
+    });
+
+    document.querySelector('.toggle-alg-input')?.addEventListener('keydown', (e) => {
+        if (document.querySelector('#alg-search-query-suggestions') && e.key === "ArrowDown") {
+            e.preventDefault();
+            document.querySelector('#alg-search-query-suggestions').classList.add('show-suggestions')
+            document.querySelector('#alg-search-query-suggestions button').focus();
+        }
+    });
+
+    document.querySelector('.toggle-alg-input')?.addEventListener('blur', (e) => {
+        document.querySelector(searchPageSuggestions)?.classList.add('d-none');
+        document.querySelector('.toggle-alg-input').setAttribute('aria-expanded', 'false');
+        document.querySelector('.alg-page-input-count').innerHTML = '';
+    });
+
+    document.querySelector('.toggle-alg-input')?.addEventListener('input', (e) => {
+        const currentQuery = e.target.value;
+
+        if (algSearchPageInstantSearch) {
+            if (currentQuery?.length >= minimumCharactersToSearch) {
+                algSearchPageInstantSearch.helper?.setQuery(currentQuery)?.search();
+                document.querySelector(searchPageSuggestions)?.classList.remove('d-none');
+                document.querySelector('.toggle-alg-input').setAttribute('aria-expanded', 'true');
+            } else {
+                document.querySelector(searchPageSuggestions)?.classList.add('d-none');
+                document.querySelector('.toggle-alg-input').setAttribute('aria-expanded', 'false');
+                document.querySelector('.alg-page-input-count').innerHTML = '';
+            }
+        } else {
+            createSearchPageInputBox(currentQuery);
+        }
+    });
+
+    document.querySelector('.alg-results-search-box-wrapper .results-search-box-button__close')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelector(searchPageSuggestions)?.classList.add('d-none');
+        document.querySelector('.toggle-alg-input').setAttribute('aria-expanded', 'false');
+        document.querySelector('.alg-page-input-count').innerHTML = '';
+        document.querySelector('.toggle-alg-input').value = '';
+        document.querySelector('#alg-search-query-suggestions').classList.remove('show-suggestions');
+
+        if (!isMobileView()) {
+            document.querySelector('.toggle-alg-input').focus();
+        }
+    });
+}
+
+function initiAlgSearchWidget() {
+    if (!algSearchWidgetInitialized) {
+        setAlgConfigs();
+        setAlgSearchClient();
+        algSearchWidgetInitialized = true;
+        setAlgConfigs();
+        getAlgoliaConfigurations(false);
+        initInputValueChangeEvent();
+
+        document.querySelector('#alg-widget-container .alg-view-all-btn')?.addEventListener('click', (e) => {
+            const currentQuery = document.querySelector('.alg-search-input input.search-box__input').value;
+            document.location.href = getSearchResultPageUrl(currentQuery);
+        });
+
+        document.querySelector('.alg-view-all-btn')?.addEventListener('keydown', (e) => {
+            if (!isMobileView() && e.key === 'Tab' && !e.shiftKey) {
+                e.preventDefault();
+                document.querySelector('.alg-search-input input.search-box__input')?.focus();
+            }
+        });
+
+        document.querySelector('#alg-widget-container .alg-clear-all')?.addEventListener('click', (e) => {
+            localStorage?.removeItem(razerRecentSearches);
+            hideRecentSearchWidget();
+        });
+    }
+}
+
+function hideRecentSearchWidget() {
+    const recentSearchElement = document.querySelector('.alg-recent-searches');
+    const currentHeight = recentSearchElement?.clientHeight;
+    recentSearchElement.style.height = currentHeight + 'px';
+    recentSearchElement.classList.add('slideup-recent-search');
+    setTimeout(() => {
+        updateRecentSearchWidget();
+    }, 500);
+}
+
+function setAlgSearchClient() {
+    if (!searchClient) {
+        searchClient = algoliasearch(algoliaAppId, algoliaApi);
+        search = instantsearch({ indexName: algMainIndex, searchClient, insights: true });
+    }
+}
+
+function setAlgConfigs() {
+    document.body.classList.add('alg-enabled');
+    if (!algoliaAppId) {
+        algoliaAppId = document.querySelector('cx-storefront')?.getAttribute('data-algolia-app');
+        algoliaApi = document.querySelector('cx-storefront')?.getAttribute('data-algolia-api');
+    }
+
+    currentSite = document.querySelector('cx-storefront')?.getAttribute('data-site');
+    currentLanguage = document.querySelector('cx-storefront')?.getAttribute('data-language');
+    currentCurrency = document.querySelector('cx-storefront')?.getAttribute('data-currency');
+    algMainIndex = currentSite + 'AlgoliaProductIndex_' + currentLanguage;
+    algQuerySuggestionIndex = algMainIndex + '_query_suggestions';
+    algConfigIndex = currentSite + 'AlgoliaConfiguration_' + currentLanguage;
+    searchPageCurrentIndex = algMainIndex;
+}
+
+function currentPageQuery() {
+    return decodeURIComponent(document.location.pathname.split('/search/')?.[1]?.split('?')[0].split('#')[0] || '');
+}
+
+function storeProductQueryData(queryID) {
+    if (queryID) {
+        localStorage?.setItem(algSearchEventDataKey, JSON.stringify({
+            query: document.querySelector('#main-nav-search-input')?.value,
+            queryID: queryID
+        }));
+    };
+}
+
+
+function resetAlgoliaStoredData() {
+    if (!document.referrer?.startsWith(document.location.origin) || !isAlgoliaEventRelatedPage()) {
+        removeAlgSearchEventData();
+    }
+}
+
+function isAlgoliaEventRelatedPage() {
+    const currentPageHtml = document.querySelector('body app-root')?.innerHTML;
+    const algoliaEventPages = [
+        'app-product-marketing',
+        'ProductDetailsPageTemplate',
+        'SearchResultsListPageTemplate'
+    ];
+    if (!currentPageHtml || algoliaEventPages.find(p => currentPageHtml.search(p) !== -1)) {
+        return true;
+    }
+
+    return false;
+}
+
+function storeAlgSearchEventData(queryData) {
+    if (document.referrer) {
+        localStorage?.setItem(algSearchEventDataKey, queryData);
+    } else {
+        removeAlgSearchEventData();
+    }
+}
+
+function getAlgSearchEventData() {
+    const storedData = localStorage?.getItem(algSearchEventDataKey);
+    if (storedData) {
+        return JSON.parse(storedData);
+    }
+
+    return null;
+}
+
+function removeAlgSearchEventData() {
+    localStorage?.removeItem(algSearchEventDataKey);
+}
+
+function initAlgSerachPage() {
+    getAlgUserProfile();
+}
+
+function getUserSelectedRefinement() {
+    const currentCategory = new URLSearchParams(document.location.search).get('category');
+    if (currentCategory) {
+        return {
+            CATEGORY: [currentCategory],
+        };
+    }
+
+    return {};
+}
+
+function getDefaultRefinementList(algSearch) {
+    if (getUserSelectedRefinement().CATEGORY) {
+        getAllRefinementLists(algSearch, { CATEGORY: {} }, null, 'alg-facet-category');
+    }
+    algSearch.start();
+}
+
+function mobileFacetFocusEvents(currentIndex) {
+    if (currentIndex === algMainIndex) {
+        document.querySelector('.alg-search-filters').addEventListener('focusout', (e) => {
+            if (
+                isMobileView() &&
+                e?.relatedTarget?.innerHTML &&
+                document.querySelector('.alg-search-container.alg-show-facets') &&
+                !document.querySelector('.alg-search-filters').innerHTML.includes(e.relatedTarget.innerHTML)
+            ) {
+                (e.srcElement || e.target)?.focus();
+            }
+        });
+
+    }
+}
+
+function getIndexName() {
+    const currentSort = new URLSearchParams(document.location.search).get('sortCode');
+    if (currentSort) {
+        return (algMainIndex + '_' + currentSort[0].toUpperCase() + currentSort.slice(1).toLowerCase());
+    }
+
+    return algMainIndex;
+}
+
+function createSearchPageWidgets() {
+    let algRazerEventDataSet = false;
+    let defaultSortSet = false;
+    algSearch = instantsearch({
+        indexName: algMainIndex, searchClient, insights: true, initialUiState: {
+            [algMainIndex]: {
+                query: currentPageQuery(),
+                refinementList: getUserSelectedRefinement(),
+            }
+        }
+    });
+    algSearch.addWidgets([
+        {
+            render({ results }) {
+                const defaultSortIndex = getIndexName();
+                if (!defaultSortSet && defaultSortIndex !== algMainIndex) {
+                    algSearch.helper?.setIndex(defaultSortIndex).search();
+                    searchPageCurrentIndex = defaultSortIndex;
+                    document.querySelector('.alg-search-container').classList.add('invisible');
+                    setTimeout(() => {
+                        document.querySelector('.alg-search-container').classList.remove('invisible');
+                    }, 1000);
+                }
+                defaultSortSet = true;
+
+                if (!algRazerEventDataSet && results?.queryID) {
+                    algRazerEventDataSet = true;
+                    storeAlgSearchEventData(JSON.stringify({ queryID: results?.queryID, query: results?.query }))
+                }
+
+                if (
+                    results &&
+                    results.renderingContent &&
+                    results.renderingContent.redirect
+                ) {
+                    window.location.href = results.renderingContent.redirect.url;
+                }
+                document.querySelector('.alg-search-page-list').classList.add('alg-render-complete');
+
+                if (!searchPageFacetRendered && searchPageCurrentIndex === results?.index && results?._rawResults?.[0]?.facets && facetsEnabled) {
+                    searchPageFacetRendered = true;
+                    algSearch = getAllRefinementLists(algSearch, results._rawResults[0].facets, results.renderingContent);
+                    mobileFacetFocusEvents(results.index);
+                }
+
+
+                const algResultCountElement = document.querySelector('.alg-results-count');
+                algResultCountElement.setAttribute('role', 'heading');
+                algResultCountElement.setAttribute('aria-level', '2');
+                const algTotalHits = (algSearch?.helper?.lastResults?.nbHits || 0);
+                algResultCountElement.innerHTML = algResultCountElement?.getAttribute('data-translate-resultsCount')?.replace('algResultsCount', algTotalHits);
+                const algPaginationData = {
+                    totalResults: algTotalHits,
+                    totalPages: (algSearch?.helper?.lastResults?.nbPages || 0),
+                    itemsPerSlide: (algSearch?.helper?.lastResults?.hitsPerPage || 20),
+                    query: algSearch?.helper?.lastResults?.query,
+                    indexName: algSearch?.helper?.lastResults?.index,
+                    currentPage: algSearch?.helper?.lastResults?.page
+                };
+
+                ssrPaginationHtml(algPaginationData);
+                updateFacetFilterAccessibility();
+            },
+        },
+        instantsearch.widgets.hierarchicalMenu({
+            container: '#alg-hierarchical-menu',
+            attributes: [
+                '*'
+            ],
+            limit: 100
+        }),
+        instantsearch.widgets.searchBox({
+            container: '#alg-searchbox-hidden',
+            placeholder: '',
+        }),
+        instantsearch.widgets.currentRefinements({
+            container: '#alg-current-refinements',
+        }),
+        instantsearch.widgets.clearRefinements({
+            container: '#alg-clear-refinements',
+            templates: {
+                resetLabel({ hasRefinements }, { html }) {
+                    return html`${document.querySelector('#alg-clear-refinements').getAttribute('data-translate-clear')}`;
+                },
+            }
+        }),
+        instantsearch.widgets.hits({
+            container: searchProductsSelector,
+            templates: {
+                empty: ({ query }, { html }) => {
+                    createPopularKeywordWidget('#alg-search-page-popuplar-keywords', '', false);
+                    document.querySelector('#alg-search-page-container').classList.add('alg-search-page-no-results');
+                    return html;
+                },
+                item(hit) {
+                    document.querySelector('#alg-search-page-container').classList.remove('alg-search-page-no-results');
+                    const learnMoreTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-learMore');
+                    return `<div class="alg-serach-product-card" tabindex="-1">
+                            ${hit.BADGE ? getBadgeHtml(hit) : ''}
+                            <div>
+                                <a href="${hit.Url}" class="alg-product-img" tabindex="-1">
+                                    <img src="${hit["img-515Wx515H"]}" alt="${hit.Name}"/>
+                                </a>
+                                <a href="${hit.Url}" class="alg-product-name" ${hasAccesibleLink(hit) ? 'tabindex="-1"' : ''}><h3 class="alg-title">${hit.Name}</h3></a>
+                                ${hit.Description ? `<div class="alg-product-description">${hit.Description}</div>` : ''}
+                                <div class="alg-price-and-learn-more">
+                                    ${getPriceHtml(hit)}
+                                    ${hit.marketingPageUrl ? `<button class="alg-learn-more" onclick="navToMarketingPage(this)" data-href="${hit.marketingPageUrl}">${learnMoreTranslate}</button>` : ''}
+                                </div>
+                                <div class="alg-cart-button">
+                                    ${getCartButton(hit)}
+                                </div>
+                                <div class="alg-list-view-info">
+                                    <div class="alg-info-data">
+                                        <a href="${hit.Url}" class="alg-product-name"><h3 class="alg-title">${hit.Name}</h3></a>
+                                        ${hit.Description ? `<div class="alg-product-description">${hit.Description}</div>` : ''}
+                                    </div>
+                                    <div class="alg-price-and-learn-more">
+                                        ${getPriceHtml(hit)}
+                                    </div>
+                                    <div class="alg-cart-button">
+                                        <div class="alg-list-view-learn-more">
+                                            ${hit.marketingPageUrl ? `<button class="alg-learn-more" onclick="navToMarketingPage(this)" data-href="${hit.marketingPageUrl}">${learnMoreTranslate}</button>` : ''}
+                                        </div>
+                                        ${getCartButton(hit)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                },
+            },
+        })
+    ]);
+    getDefaultRefinementList(algSearch);
+    initInsights();
+    document.querySelector('#alg-searchbox input')?.addEventListener('keypress', (e) => {
+        const currentSearchQuery = e?.target?.value;
+        if (currentSearchQuery && e.key === "Enter") {
+            e.preventDefault();
+            updateRecentSearchAndShowSearchPage(currentSearchQuery, '', getSearchResultPageUrl(currentSearchQuery));
+        }
+    });
+}
+
+function updateFacetFilterAccessibility() {
+    document.querySelectorAll('#alg-facet-widgets .alg-search-facet-group').forEach(f => {
+        const currentPanelId = f.id;
+        const labelId = f.querySelector('.alg-search-facet-group-title').id;
+        f.querySelector('.alg-search-facet-group-title button').setAttribute('aria-controls', (currentPanelId + '-contentet'));
+        f.querySelector('.ais-Panel-body')?.setAttribute('role', 'group');
+        f.querySelector('.ais-Panel-body')?.setAttribute('aria-labelledby', labelId);
+        f.querySelector('.ais-Panel-body').id = (currentPanelId + '-contentet');
+    });
+    setTimeout(() => {
+        document.querySelectorAll('#alg-current-refinements li .ais-CurrentRefinements-delete').forEach(r => {
+            const refinementLabel = r.parentElement.querySelector('.ais-CurrentRefinements-categoryLabel').innerHTML;
+            r.innerHTML = '<span class="screen-reader-only">Filter criteria, select to remove </span><span>' + refinementLabel + '</span><span class="refinemnet-remove-icon" aria-hidden="true">✕</span>';
+        });
+    }, 1000)
+}
+
+function hasAccesibleLink(hit) {
+    return ((hit.StockLevelStatus === 'inStock' || hit.StockLevelStatus === 'preOrderStock') && !hit.isEligibleForEarlyAccess)
+}
+
+function createPopularKeywordWidget(popularKeywordSlector, emptyElement, isWidget) {
+    const bestSellerSelector = '#alg-best-sellers';
+    if (document.querySelector(popularKeywordSlector).innerHTML === '') {
+        instantsearch({
+            indexName: algMainIndex, searchClient, insights: true
+        }).addWidgets([
+            instantsearch.widgets.configure({
+                hitsPerPage: 6,
+            }),
+            instantsearch.widgets.hits({
+                insights: true,
+                container: bestSellerSelector,
+                templates: {
+                    empty: ({ query }, { html }) => {
+                        document.querySelector('.algolia-widget-container').classList.add('alg-best-seller');
+                        return html;
+                    },
+                    item: (hit, { components }) => {
+                        document.querySelector('.algolia-widget-container').classList.add('alg-best-seller');
+                        return '<div class="alg-product-card"><a href="' + getProductPageUrl(hit.Url) + '"><img aria-hidden="true" class="alg-product-img" src="' + hit["img-515Wx515H"] + '" alt=""/><div class="alg-product-name">' + hit.Name + '</div></a></div>';
+                    }
+                },
+                cssClasses: {
+                    list: ['ais-TrendingItems-list'],
+                },
+            }),
+            instantsearch.widgets
+                .index({ indexName: algQuerySuggestionIndex })
+                .addWidgets([
+                    instantsearch.widgets.configure({
+                        hitsPerPage: 6,
+                    }),
+                    instantsearch.widgets.hits({
+                        container: popularKeywordSlector,
+                        templates: {
+                            empty: ({ query }, { html }) => {
+                                if (isWidget) {
+                                    document.querySelector('.algolia-widget-container').classList.add('alg-popular-keyword');
+                                }
+                                document.querySelector(emptyElement || popularKeywordSlector).classList.add('d-none');
+                                return html;
+                            },
+                            item: (hit, { components }) => {
+                                if (isWidget) {
+                                    document.querySelector('.algolia-widget-container').classList.add('alg-popular-keyword');
+                                }
+                                document.querySelector(emptyElement || popularKeywordSlector).classList.remove('d-none');
+                                return '<button class="alg-product-nav" role="link" onclick=updateRecentSearchAndShowSearchPage("' + encodeURIComponent(hit.query) + '","' + encodeURIComponent(hit.objectID) + '","' + getSearchResultPageUrl(hit.query) + '") data-href="' + getSearchResultPageUrl(hit.query) + '"><span class="screen-reader-only">Search: </span>' + hit.query + '</button> ';
+                            }
+                        },
+                    })
+                ])
+        ]).start();
+    }
+}
+
+function createSearchPageInputBox(currentQuery) {
+    algSearchPageInstantSearch = instantsearch({
+        indexName: algMainIndex, searchClient, insights: true, initialUiState: {
+            [algMainIndex]: {
+                query: currentQuery
+            }
+        }
+    }).addWidgets([
+        instantsearch.widgets.searchBox({
+            container: '#alg-searchbox',
+            placeholder: '',
+        }),
+        instantsearch.widgets
+            .index({ indexName: algQuerySuggestionIndex })
+            .addWidgets([
+                instantsearch.widgets.configure({
+                    hitsPerPage: 5,
+                }),
+                instantsearch.widgets.hits({
+                    container: searchPageSuggestions,
+                    templates: {
+                        empty: ({ query }, { html }) => {
+                            document.querySelector('.alg-page-input-count').innerHtml = '0 results found';
+                            document.querySelector(searchPageSuggestions).classList.add('alg-empty-results');
+                            return html;
+                        },
+                        item: (hit, { components }) => {
+                            document.querySelector('.alg-page-input-count').innerHTML = (hit.__position + ' results found');
+                            document.querySelector(searchPageSuggestions).classList.remove('alg-empty-results');
+                            const currentHitCategory = hit?.[algMainIndex]?.facets?.exact_matches?.['CATEGORY']?.[0]?.value;
+                            let queryButtonText = '<span class="alg-capitalize">' + instantsearch.highlight({ attribute: 'query', hit }) + '</span>';
+
+                            if (currentHitCategory) {
+                                const categoryButtonText = '<span class="alg-capitalize">' + currentHitCategory + '</span>';
+                                const searchInTranslation = document.querySelector(topSuggestionsSelector).getAttribute('data-searchIn-translation');
+                                queryButtonText = searchInTranslation.replace('algQuery', queryButtonText).replace('algCategory', categoryButtonText);
+
+                            }
+
+                            return '<button role="link" onkeydown=focusNextSuggestion(event) onclick=updateRecentSearchAndShowSearchPage("' + encodeURIComponent(hit.query) + '","' + encodeURIComponent(hit.objectID) + '","' + getSearchResultPageUrl(hit.query) + '","' + encodeURIComponent(currentHitCategory) + '") data-href="' + getSearchResultPageUrl(hit.query) + '">' + queryButtonText + '</button>';
+                        }
+                    },
+                })
+            ])
+    ]);
+    algSearchPageInstantSearch.start();
+}
+
+function focusNextSuggestion(e) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+    }
+
+    if (e.key === 'ArrowDown' && e.srcElement?.parentElement?.nextElementSibling) {
+        e.srcElement?.parentElement?.nextElementSibling?.querySelector('button')?.focus();
+    } else if (e.key === 'ArrowDown') {
+        document.querySelector('#alg-search-query-suggestions button')?.focus();
+    } else if (e.key === 'ArrowUp' && e.srcElement?.parentElement?.previousElementSibling) {
+        e.srcElement?.parentElement?.previousElementSibling?.querySelector('button')?.focus();
+    } else if (e.key === 'ArrowUp') {
+        document.querySelector('#alg-search-query-suggestions ol > li:last-child button')?.focus();
+    } else if (e.key === 'Escape') {
+        document.querySelector('#alg-search-query-suggestions').classList.remove('show-suggestions');
+        document.querySelector('.toggle-alg-input')?.focus();
+    }
+}
+
+function setAlgPage(page, e) {
+    if (e?.getAttribute('aria-disabled') === 'true') {
+        return;
+    }
+
+    razerSsrCurrentPage = page;
+    algSearch.helper?.setPage(page).search();
+    window.scrollTo(0, 0);
+    setTimeout(() => {
+        document.querySelector('#alg-search-page-products .alg-serach-product-card').focus();
+    }, 1000);
+}
+
+function setAlgSort(algIndex) {
+    document.querySelector('#alg-facet-widgets').innerHTML = '<div id="alg-facet-category"></div>';
+    searchPageFacetRendered = false;
+    searchPageCurrentIndex = algIndex;
+    algSearch.helper?.setIndex(algIndex).search();
+}
+
+function getRatingHtml(hit) {
+    const reviewTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-review');
+    const algRatingHtml = `
+    <div class="alg-product-avg-rating">
+        <div class="alg-product-razer-star-rating" style="--star-fill: ${hit.ReviewAvgRating};">
+            <div class="star cx-icon fas fa-star" aria-hidden="true"></div>
+            <div class="star cx-icon fas fa-star" aria-hidden="true"></div>
+            <div class="star cx-icon fas fa-star" aria-hidden="true"></div>
+            <div class="star cx-icon fas fa-star" aria-hidden="true"></div>
+            <div class="star cx-icon fas fa-star" aria-hidden="true"></div>
+        </div> ${reviewTranslate.replace('algUserReview', getProductRating(hit.ReviewAvgRating))}
+    </div>
+    `;
+
+    return algRatingHtml;
+}
+
+function getProductRating(averageRating) {
+    let partialRating = (averageRating % 1).toFixed(1);
+    const fullRating = Math.floor(averageRating)
+
+    if (partialRating <= 0.2) {
+        partialRating = 0;
+    } else if (0.3 <= partialRating && 0.7 >= partialRating) {
+        partialRating = 0.45;
+    } else {
+        partialRating = 1;
+    }
+
+    return (fullRating + partialRating);
+}
+
+function getBadgeHtml(hit) {
+    const algBatchHtml = `
+    <div class="alg-product-badge">
+    <div class="alg-product-badge alg-badge-${hit.BADGE.color?.toLowerCase()}">
+        <p>
+            ${hit.BADGE.subscript ? `<span class="alg-product-subscript">${hit.BADGE.subscript}</span>` : ''}
+            ${hit.BADGE.displayName?.toUpperCase() || hit.BADGE.name?.toUpperCase()}
+        </p>
+        </div>
+    </div>
+    `;
+
+    return algBatchHtml;
+}
+
+function getPriceHtml(hit) {
+    const algPrice = 'Price_' + currentCurrency;
+    const algMarkdownPrice = 'MarkDownPriceValue_' + currentCurrency;
+    const algPriceData = hit[algPrice];
+    let algMarkdownPriceData = hit[algMarkdownPrice];
+    let isUserGroupPrice = false;
+
+    if (currentUserData?.groups && currentUserData?.groups.length) {
+        currentUserData?.groups.forEach(g => {
+            const currentPriceUserGroup = 'UserGroupSpecificPrice_' + g.toUpperCase() + '_' + currentCurrency;
+            if (hit[currentPriceUserGroup]?.['formattedValue']) {
+                algMarkdownPriceData = hit[currentPriceUserGroup];
+                isUserGroupPrice = true;
+            }
+        });
+    }
+
+    return getAlgPriceHtml(algPriceData, algMarkdownPriceData, currentUserData, isUserGroupPrice);
+}
+
+function getCppDiscountHtml(currentUserData, isUserGroupPrice) {
+    const cppTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-cpp');
+    return (currentUserData?.cpp && isUserGroupPrice) ? '<br/>' + cppTranslate : '';
+}
+
+function getEppDiscountHtml(currentUserData, isUserGroupPrice) {
+    const eppTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-epp');
+    return (currentUserData?.epp && isUserGroupPrice) ? '<br/>' + eppTranslate : '';
+}
+
+function getAlgPriceHtml(algPriceData, algMarkdownPriceData, currentUserData, isUserGroupPrice) {
+    const offTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-off');
+
+    return `
+        ${algPriceData && algMarkdownPriceData && algMarkdownPriceData.formattedValue ? `
+            <div class="alg-product-price">
+                <div class="alg-final-price" aria-label="Product price">
+                    <span class="screen-reader-only">Current price: </span>${algMarkdownPriceData.formattedValue}
+                </div>
+                <div class="alg-previous-price" aria-label="Price without discount">
+                    <del>
+                        <span class="screen-reader-only">Original price: </span>${algPriceData.formattedValue}
+                    </del>
+                    <span class="alg-savings">
+                      (${offTranslate.replace('algOff', algMarkdownPriceData.savings)})
+                      ${getCppDiscountHtml(currentUserData, isUserGroupPrice)}
+                      ${getEppDiscountHtml(currentUserData, isUserGroupPrice)}
+                    </span>
+                </div>
+            </div>
+        ` : ''}
+        ${algPriceData && (!algMarkdownPriceData || !algMarkdownPriceData.formattedValue) ? `
+            <div class="alg-product-price">
+                <div class="alg-final-price" aria-label="Product price">
+                    <span class="screen-reader-only">Current price: </span>${algPriceData.formattedValue}
+                </div>
+            </div>
+        ` : ''}
+    `;
+}
+
+function getDataHrefHtml(hit) {
+    if (hit.Url) {
+        return `data-href="${hit.Url}"`;
+    }
+
+    return '';
+}
+
+function getCartButton(hit) {
+    let algCartButton = '';
+    const algPrice = 'Price_' + currentCurrency;
+    const buyTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-buy');
+    const notifyMeTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-notifyMe');
+    const preOrdereTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-preOrder');
+    const outOfStockTranslate = document.querySelector(searchProductsSelector).getAttribute('data-translate-outOfStock');
+
+    if ((hit.isEligibleForEarlyAccess || hit.StockLevelStatus === 'outOfStock') && hit['NotifyMe'] === true) {
+        algCartButton = `<button class="alg-cart-btn alg-btn-notify-me" data-sku="${hit.objectID}" data-name="${hit.Name || ''}" data.price="${hit?.[algPrice]?.value || ''}" onclick="openNotifyMe(this, ${hit.__position}, '${hit.__queryID}')">${notifyMeTranslate}</button>`;
+    } else if (hit.StockLevelStatus === 'inStock' && !hit.isEligibleForEarlyAccess) {
+        algCartButton = `<button onclick="navToMarketingPage(this)" class="alg-cart-btn alg-btn-buy" ${getDataHrefHtml(hit)}>${buyTranslate}</button>`;
+    } else if (hit.StockLevelStatus === 'preOrderStock' && !hit.isEligibleForEarlyAccess) {
+        algCartButton = `<button onclick="navToMarketingPage(this)" class="alg-cart-btn alg-btn-pre-order" ${getDataHrefHtml(hit)}>${preOrdereTranslate}</button>`;
+    } else {
+        algCartButton = `<button class="alg-cart-btn alg-btn-out-of-stock">${outOfStockTranslate}</button>`;
+    }
+    return algCartButton;
+}
+
+function openNotifyMe(e, position, queryID) {
+    const currentProductCode = e.getAttribute('data-sku');
+    const currentProductPrice = e.getAttribute('data-price');
+    const currentProductName = e.getAttribute('data-name');
+    if (currentProductCode) {
+        document.dispatchEvent(new CustomEvent('openNotifyMe', {
+            detail: {
+                code: currentProductCode,
+                name: currentProductName,
+                price: {
+                    value: currentProductPrice
+                }
+            }
+        }));
+    }
+
+    algNotifyMeEventData = {
+        index: algMainIndex,
+        queryID: queryID,
+        objectIDs: [currentProductCode],
+        positions: [position]
+    };
+}
+
+function navToMarketingPage(e) {
+    const searchInputInstruction = document.getElementById('search-input-instruction');
+    const redirectBase = (searchInputInstruction.getAttribute('data-redirect') || '/');
+    const url = `${redirectBase}${e.getAttribute('data-href')}`;
+    document.location.href = (document.location.origin + url).replace(/([^:]\/)\/+/g, "$1");
+}
+
+function doNotCreateRefinement(currentValueSort) {
+    return (currentValueSort?.order && !currentValueSort.order.length && currentValueSort?.sortRemainingBy === 'hidden');
+}
+
+function getRefinemnetContainer(defaultFacetId, currentContainerId) {
+    let currentContainer;
+    if (defaultFacetId) {
+        currentContainer = document.querySelector('#' + defaultFacetId);
+    } else {
+        currentContainer = document.createElement('div');
+        currentContainer.id = currentContainerId;
+    }
+
+    return currentContainer;
+}
+
+function isRefinementExpanded(defaultFacetExpansion, currentContainer, r) {
+    const panelExpanded = (!defaultFacetExpansion || !defaultFacetExpansion.find(h => h.facet_name === r && h.facet_expansion === 'true'));
+    if (panelExpanded) {
+        currentContainer.classList.add('expanded');
+    }
+
+    return panelExpanded
+}
+
+function hideZeroFacets(e) {
+    if (e.querySelector('.ais-RefinementList--noRefinement')) {
+        e.classList.add('d-none');
+    } else {
+        e.classList.remove('d-none');
+    }
+}
+
+function getSortedRefinementItems(items, currentValueSort) {
+    if (currentValueSort?.order?.length && currentValueSort?.sortRemainingBy === 'hidden') {
+        items = items.filter(val => currentValueSort.order.includes(val.value));
+        items = items.sort((a, b) => currentValueSort.order.indexOf(a) - currentValueSort.order.indexOf(b));
+        return items;
+    }
+
+    items = getSortedUnPinnedItems(items, currentValueSort);
+
+    if (currentValueSort?.order?.length) {
+        let pinnedItems = items.filter(val => currentValueSort.order.includes(val.value));
+        const unPinnedItems = items.filter(val => !currentValueSort.order.includes(val.value));
+        pinnedItems = pinnedItems.sort((a, b) => currentValueSort.order.indexOf(a) - currentValueSort.order.indexOf(b));
+        if (currentValueSort?.sortRemainingBy === 'count') {
+            pinnedItems = pinnedItems.reverse();
+        }
+
+        items = [
+            ...pinnedItems,
+            ...unPinnedItems
+        ];
+    }
+
+    return items;
+}
+
+function getSortedUnPinnedItems(items, currentValueSort) {
+    if (currentValueSort?.sortRemainingBy === 'alpha') {
+        items = items.sort(function (a, b) {
+            if (a.label < b.label) { return -1; }
+            if (a.label > b.label) { return 1; }
+            return 0;
+        });
+    } else if (currentValueSort?.sortRemainingBy === 'count') {
+        items = items.sort(function (a, b) {
+            if (a.count < b.count) { return -1; }
+            if (a.count > b.count) { return 1; }
+            return 0;
+        }).reverse();
+    }
+
+    return items;
+}
+
+function getRefinementItemHtml(item, r) {
+    const { label, count, isRefined } = item;
+
+    return `
+            <input type="checkbox" onkeydown="toggleFacetItem(event)"
+                name="alg-facet-item-${label}" value="${label}" id="${getFacetItemId(r, label, count)}"
+                class="screen-reader-only alg-facet-item-toggle-btn" ${isRefined ? 'checked' : ''}>
+            <label class="ais-RefinementList-label" for="${getFacetItemId(r, label, count)}">
+            <div class="ais-RefinementList-checkbox" aria-hidden="true">
+            <svg focusable="false" viewBox="0 0 24 24" aria-hidden="true" class="mdc-checkbox__checkmark ">
+                <path fill="none" d="M1.73,12.91 8.1,19.28 22.79,4.59" class="mdc-checkbox__checkmark-path">
+                </path>
+            </svg>
+            </div>
+            <div>
+                <span class="ais-RefinementList-labelText">${label}</span>
+                <span class="ais-RefinementList-count">(${count})</span>
+            </div>
+        </label>
+        `;
+}
+
+function getAllRefinementLists(algSearch, facets, sortingData, defaultFacetId = '') {
+    facets = Object.keys(facets);
+    let facetOrdering = sortingData?.facetOrdering?.facets?.order;
+    const allValuesSortData = sortingData?.facetOrdering?.values;
+    if (facetOrdering?.length) {
+        facetOrdering = facetOrdering.filter(f => facets.includes(f));
+        facets = [
+            ...facetOrdering,
+            ...facets
+        ];
+        facets = [...new Set(facets)];
+    }
+
+    let i = 1;
+    facets.forEach(r => {
+        const currentValueSort = allValuesSortData?.[r];
+        if (doNotCreateRefinement(currentValueSort)) {
+            return;
+        }
+
+        const currentContainerId = defaultFacetId || ('alg-facet' + i);
+        const currentContainer = getRefinemnetContainer(defaultFacetId, currentContainerId);
+
+
+        currentContainer.classList.add('alg-search-facet-group');
+        const panelExpanded = isRefinementExpanded(defaultFacetExpansion, currentContainer, r);
+        let container = document.querySelector('#' + currentContainerId);
+        document.querySelector('#alg-facet-widgets')?.appendChild(currentContainer);
+        i += 1;
+        container = document.querySelector('#alg-facet-widgets #' + currentContainerId);
+
+        algSearch.addWidgets([
+            {
+                render() {
+                    setTimeout(() => {
+                        document.querySelectorAll('#alg-facet-widgets > div')?.forEach(e => {
+                            hideZeroFacets(e);
+                        });
+                    }, 1000);
+                }
+            },
+            instantsearch.widgets.panel({
+                templates: {
+                    header: '<h3 class="alg-search-facet-group-title" data-panel-id="' + currentContainerId + '" onclick=toggleFacetCategory("' + currentContainerId + '") id="' + currentContainerId + '-title"><button aria-expanded="' + !panelExpanded + '"><span>' + r + '</span><span aria-hidden="true" class="alg-toggle-facet material-icons">expand_less</span></button></h3>'
+                }
+            })(instantsearch.widgets.refinementList)({
+                container: container,
+                attribute: r,
+                limit: 100,
+                transformItems(items) {
+                    return getSortedRefinementItems(items, currentValueSort);
+                },
+                templates: {
+                    item(item, { html }) {
+                        return getRefinementItemHtml(item, r);
+                    }
+                }
+            })
+        ]);
+    });
+    return algSearch;
+}
+
+function toggleFacetItem(e) {
+    if (e?.key === 'Enter') {
+        e.srcElement?.click();
+    }
+}
+
+function getFacetItemId(category, label, count) {
+    const id = (category + '_' + label + '_' + count).replace(/\W/g, '_');
+    return id.charAt(0).match(/[\d_]/g)?.length ? `id_${id}` : id;
+}
+
+function getAlgUserProfile() {
+    const userInfo = JSON.parse(localStorage.getItem('spartacus⚿⚿auth'));
+    if (userInfo && userInfo.token) {
+        const occBaseUrl = window.document.getElementsByName('occ-backend-base-url')[0].getAttribute('content');
+        const header = {
+            headers: {
+                'Authorization': userInfo.token.token_type + ' ' + userInfo.token.access_token
+            }
+        };
+        const userProfileServiceUrl = occBaseUrl + '/rest/v2/' + currentSite + '/users/' + userInfo.userId + '?fields=FULL&lang=' + currentLanguage + '&curr=' + currentCurrency;
+        fetch(userProfileServiceUrl, header)
+            .then(response => response.json())
+            .then(data => {
+                if (data?.groups?.length) {
+                    currentUserData = data;
+                }
+
+                createSearchPageWidgets();
+            }, err => {
+                createSearchPageWidgets();
+            });
+    } else {
+        createSearchPageWidgets();
+    }
+}
+
+function toggleFacetCategory(currentContainerId) {
+    document.getElementById(currentContainerId).classList.toggle('expanded');
+    const facetExpanded = !document.getElementById(currentContainerId).classList.contains('expanded');
+
+    if (facetExpanded) {
+        document.getElementById(currentContainerId).querySelector('.alg-search-facet-group-title button').setAttribute('aria-expanded', 'true');
+    } else {
+        document.getElementById(currentContainerId).querySelector('.alg-search-facet-group-title button').setAttribute('aria-expanded', 'false');
+    }
+}
+
+function toggleAlgSearchWidget() {
+    const razerSearchIcon = document.querySelector('#razer-search-menu');
+    const searchWidgetPanel = document.querySelector('#search-box');
+    razerSearchIcon.setAttribute('aria-expanded', 'true');
+    searchWidgetPanel.removeAttribute('hidden');
+    razerSearchIcon.classList.add('search-widget-active');
+    document.querySelector('body').classList.add('search-widget-animate');
+    document.querySelector('body').classList.add('search-widget-animate-visible');
+    document.querySelector('body').classList.add('search-widget-open');
+}
+
+function updateRecentSearchWidget() {
+    document.querySelector('.alg-recent-searches ul')?.remove();
+
+    if (localStorage && localStorage.getItem(razerRecentSearches)) {
+        document.querySelector('.alg-recent-searches')?.classList.remove('no-recent-search');
+        createRecentSerachWidget();
+    } else {
+        document.querySelector('.alg-recent-searches')?.classList.add('no-recent-search');
+    }
+}
+
+function validateUserType() {
+    const allWidgetsContainer = document.querySelector('#alg-widget-container');
+
+    if (localStorage && localStorage.getItem(razerRecentSearches)) {
+        allWidgetsContainer?.classList.remove('razer-new-user');
+        allWidgetsContainer?.classList.add('razer-existing-user');
+    } else {
+        allWidgetsContainer?.classList.add('razer-new-user');
+        allWidgetsContainer?.classList.remove('razer-existing-user');
+    }
+}
+
+function initInputValueChangeEvent() {
+    const allWidgetsContainer = document.querySelector('#alg-widget-container');
+    const algSearchInput = document.querySelector('.alg-search-input input.search-box__input');
+    const algSearchCloseIcon = document.querySelector('.alg-search-input .search-box--close')
+    updateRecentSearchWidget();
+    validateUserType();
+
+    algSearchInput?.addEventListener('input', (e) => {
+        const currentSearchQuery = e?.target?.value;
+        const searchLabel = document.getElementById('search-widget-label');
+        const searchLabelBox = document.querySelector('#search-box .razer-acc-float-input');
+        if (currentSearchQuery) {
+            document.querySelector('app-razer-search-widget .search-box--close').setAttribute('aria-label', 'Clear Search');
+            document.querySelector('app-razer-search-widget .search-box--close').nextSibling.disabled = false;
+        } else {
+            document.querySelector('app-razer-search-widget .search-box--close').setAttribute('aria-label', 'Close Search ');
+            document.querySelector('app-razer-search-widget .search-box--close').nextSibling.disabled = true;
+        }
+
+        if (search && currentSearchQuery?.length >= minimumCharactersToSearch) {
+            search.helper?.setQuery(currentSearchQuery)?.search();
+            allWidgetsContainer.classList.add('show-input-search-widgets');
+        } else {
+            if (search?.helper?.lastResults?.query?.length) {
+                search?.helper?.setQuery('')?.search();
+            }
+
+            allWidgetsContainer.classList.remove('show-input-search-widgets');
+        }
+
+        if (currentSearchQuery && currentSearchQuery.length) {
+            searchLabelBox.classList.add('floating-input');
+            searchLabel.classList.add('screen-reader-only');
+            document.querySelector('.aloglia-input-clear-button').classList.add('show-clear-btn')
+        } else {
+            searchLabelBox.classList.remove('floating-input');
+            searchLabel.classList.remove('screen-reader-only');
+            document.querySelector('.aloglia-input-clear-button').classList.remove('show-clear-btn')
+        }
+    });
+
+    document.querySelector('.aloglia-input-clear-button').addEventListener('click', () => {
+        algSearchInput.value = '';
+        algSearchInput.dispatchEvent(new Event('input'));
+        document.querySelector('.aloglia-input-clear-button').classList.remove('show-clear-btn')
+    });
+
+    algSearchInput?.addEventListener('keypress', (e) => {
+        const currentSearchQuery = e?.target?.value;
+        if (currentSearchQuery && e.key === "Enter") {
+            e.preventDefault();
+            updateRecentSearchAndShowSearchPage(currentSearchQuery, '', getSearchResultPageUrl(currentSearchQuery));
+        }
+    });
+
+    algSearchInput?.addEventListener('keydown', (e) => {
+        if (!isMobileView() && e.key === 'Tab' && e.shiftKey) {
+            e.preventDefault();
+        }
+    });
+
+    document.querySelector('.alg-close-widget').addEventListener('click', () => {
+        algSearchInput.value = '';
+        algSearchCloseIcon?.click();
+    });
+
+    algSearchCloseIcon?.addEventListener('click', (e) => {
+
+        if (algSearchInput.value) {
+            e.preventDefault();
+            algSearchInput.value = '';
+        } else {
+            resetCloseButton();
+        }
+        algSearchInput.dispatchEvent(new Event('input'));
+    });
+
+    document.querySelector('#razer-search-menu')?.addEventListener('keydown', (e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            toggleAlgoliaSearchWidget()
+        }
+    });
+
+    algSearchCloseIcon?.addEventListener('keydown', (e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            toggleAlgoliaSearchWidget()
+        }
+    });
+}
+
+function toggleAlgoliaSearchWidget() {
+    const razerSearchIcon = document.querySelector('#razer-search-menu');
+    const isActive = razerSearchIcon.classList.contains('search-widget-active');
+    const searchWidgetPanel = document.querySelector('#search-box');
+    const isAlgEnabled = !!document.querySelector('.algolia-enabled');
+    const algSearchInput = document.querySelector('.alg-search-input input.search-box__input');
+    if (!isAlgEnabled) {
+        return;
+    }
+
+
+    if (isActive) {
+        if (algSearchInput?.value) {
+            algSearchInput.value = '';
+            algSearchInput.dispatchEvent(new Event('input'));
+            return;
+        }
+
+        razerSearchIcon.setAttribute('aria-expanded', 'false');
+        searchWidgetPanel.setAttribute('hidden', 'true');
+        razerSearchIcon.classList.remove('search-widget-active');
+        document.querySelector('body').classList.remove('search-widget-animate');
+        document.querySelector('body').classList.remove('search-widget-open');
+        document.querySelector('body').classList.remove('search-widget-animate-visible');
+    } else {
+        razerSearchIcon.setAttribute('aria-expanded', 'true');
+        searchWidgetPanel.removeAttribute('hidden');
+        razerSearchIcon.classList.add('search-widget-active');
+
+        setTimeout(() => {
+            if (isAlgEnabled) {
+                document.querySelector('#main-nav-search-input')?.focus();
+            } else {
+                searchWidgetPanel.querySelector('.search-icon')?.focus();
+            }
+        }, 1000);
+        setTimeout(() => {
+            document.querySelector('body').classList.add('search-widget-animate');
+        }, 100);
+        setTimeout(() => {
+            document.querySelector('body').classList.add('search-widget-animate-visible');
+        }, 400);
+        document.querySelector('body').classList.add('search-widget-open');
+    }
+}
+
+function resetCloseButton() {
+    document.querySelector('body').classList.remove('search-widget-animate');
+    document.querySelector('body').classList.remove('search-widget-open');
+    document.querySelector('body').classList.remove('search-widget-animate-visible');
+    document.querySelector('#razer-search-menu')?.classList.remove('search-widget-active');
+    document.querySelector('#razer-search-menu')?.setAttribute('aria-expanded', 'false')
+    document.querySelector('.algolia-widget-container').setAttribute('hidden', 'true');
+    document.querySelector('.alg-search-input input.search-box__input')?.setAttribute('aria-expanded', 'false');
+}
+
+function updateRecentSearchAndShowSearchPage(label, id, searchPage, category = '') {
+    const currentSort = searchPageCurrentIndex?.replace((algMainIndex + '_'), '')?.toLowerCase();
+    const currentSearch = {
+        label: label,
+        id: (id || '')
+    };
+    let recentSearchData = localStorage?.getItem(razerRecentSearches);
+    if (recentSearchData) {
+        recentSearchData = JSON.parse(recentSearchData).filter(r => (r.label !== label)).slice(0, 3);
+        recentSearchData = [currentSearch].concat(recentSearchData);
+        localStorage?.setItem(razerRecentSearches, JSON.stringify(recentSearchData));
+    } else {
+        localStorage?.setItem(razerRecentSearches, JSON.stringify([currentSearch]));
+    }
+    let url = (searchPage + (category ? ('?category=' + category) : ''));
+    if (currentSort && currentSort !== algMainIndex.toLowerCase()) {
+        if (category) {
+            url += '&'
+        } else {
+            url += '?'
+        }
+
+        url += ('sortCode=' + currentSort);
+    }
+
+    document.location.href = url;
+}
+
+function removeRecentSearchItem(label) {
+    let recentSearchData = localStorage?.getItem(razerRecentSearches);
+    if (recentSearchData) {
+        recentSearchData = JSON.parse(recentSearchData).filter(r => (r.label !== label));
+
+        if (recentSearchData && recentSearchData.length) {
+            localStorage?.setItem(razerRecentSearches, JSON.stringify(recentSearchData));
+            updateRecentSearchWidget();
+        } else {
+            localStorage?.removeItem(razerRecentSearches);
+            hideRecentSearchWidget();
+        }
+    } else {
+        updateRecentSearchWidget();
+    }
+}
+
+function createRecentSerachWidget() {
+    let recentSearchData = localStorage?.getItem(razerRecentSearches);
+    if (recentSearchData) {
+        recentSearchData = JSON.parse(recentSearchData).slice(0, 4);
+        const recentSearchElement = document.createElement('ul');
+        recentSearchElement.classList.add('ais-Hits-list');
+        let recentSearchList = '';
+        recentSearchData.forEach(r => {
+            recentSearchList += '<li><button data-search-label="' + decodeURIComponent(r.label) + '" role="link" data-href="' + getSearchResultPageUrl(decodeURIComponent(r.label)) + '" class="alg-recent-search-item alg-product-nav"><span class="screen-reader-only">Search: </span>' + decodeURIComponent(r.label) + '</button><button aria-label="Remove Search Term: ' + decodeURIComponent(r.label) + '" class="alg-recent-item-remove" data-item-label="' + r.label + '"><span aria-hidden="true">&#10005;</span></button></li>';
+        });
+
+        recentSearchElement.innerHTML = recentSearchList;
+        document.getElementById('alg-recent-searches')?.appendChild(recentSearchElement);
+        document.querySelectorAll('#alg-widget-container .alg-recent-search-item').forEach(function (elem) {
+            elem.addEventListener("click", function (e) {
+                const currentSearchQuery = e.target.getAttribute('data-search-label');
+                updateRecentSearchAndShowSearchPage(currentSearchQuery, '', getSearchResultPageUrl(currentSearchQuery));
+            });
+        });
+
+        document.querySelectorAll('#alg-widget-container .alg-recent-item-remove').forEach(function (elem) {
+            elem.addEventListener("click", function (e) {
+                removeRecentSearchItem(elem.getAttribute('data-item-label'));
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+    }
+}
+
+function getAlgoliaConfigurations(isSearchPage) {
+    if (algCongigInitialized) {
+        setAlgConfigData(algCongigInitialized, isSearchPage);
+        return;
+    }
+
+    (async () => {
+        try {
+            const response = await fetch(
+                `https://${algoliaAppId}-dsn.algolia.net/1/indexes/${algConfigIndex}/query`,
+                {
+                    method: "POST",
+                    headers: {
+                        "X-Algolia-Application-Id": algoliaAppId,
+                        "X-Algolia-API-Key": algoliaApi,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ query: "", clickAnalytics: true })
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                algCongigInitialized = data;
+                setAlgConfigData(data, isSearchPage);
+            } else if (!isSearchPage) {
+                createAlgoliaWidgets();
+            } else if (isSearchPage) {
+                initAlgSerachPage();
+            }
+        } catch (error) {
+            if (!isSearchPage) {
+                createAlgoliaWidgets();
+            } else if (isSearchPage) {
+                initAlgSerachPage();
+            }
+        }
+    })();
+}
+
+function updateFeatureCategory() {
+    if (!localStorage?.getItem(razerRecentSearches)) {
+        getTrendingFacets();
+    } else {
+        document.querySelector('.algolia-widget-container').classList.add('alg-feature-cat');
+    }
+}
+
+
+function setAlgConfigData(data, isSearchPage) {
+    if (data) {
+        const minimumChar = data?.hits?.find(h => h.minimum_characters)?.minimum_characters;
+        const quickLinks = data?.hits?.filter(h => h.QuickLinkname);
+        defaultFacetExpansion = data?.hits?.filter(h => h.facet_expansion);
+        trendingFacets = data?.hits?.filter(h => h.Featured_categories === 'true')?.[0]?.values?.slice(0, 5);
+
+        if (minimumChar !== undefined) {
+            minimumCharactersToSearch = minimumChar;
+        }
+
+        if (!isSearchPage) {
+            updateFeatureCategory();
+        }
+
+        if (!isSearchPage && quickLinks && quickLinks.length) {
+            const quickLinkElement = document.createElement('ul');
+            let quickLinkList = '';
+            quickLinks.forEach(q => {
+                const algInsightData = {
+                    index: algConfigIndex,
+                    queryID: data.queryID,
+                    objectIDs: [q.objectID],
+                    positions: [(data.hits.indexOf(q) + 1)]
+                };
+                quickLinkList += '<li><a onclick=algEventQuickLinkHit(' + JSON.stringify(algInsightData) + ') href="' + q.url + '" target="_blank">' + q.QuickLinkname + '</a> <span aria-hidden="true">></span></li>';
+            });
+
+            quickLinkElement.innerHTML = quickLinkList;
+            document.getElementById('alg-quick-links')?.appendChild(quickLinkElement);
+            document.getElementById('alg-quick-links-mobile')?.appendChild(quickLinkElement.cloneNode(true));
+            document.querySelector('#alg-quick-links-mobile > ul > li:last-child a')?.addEventListener('keydown', (e) => {
+                if (e.key === 'Tab' && !e.shiftKey) {
+                    e.preventDefault();
+                }
+            });
+        } else if (!isSearchPage) {
+            document.getElementById('alg-quick-links')?.classList.add('d-none');
+            document.getElementById('alg-quick-links-mobile')?.classList.add('d-none');
+        }
+    }
+    initInstantSearch(isSearchPage);
+}
+
+function initInstantSearch(isSearchPage) {
+    if (!isSearchPage) {
+        createAlgoliaWidgets();
+    } else {
+        initAlgSerachPage();
+    }
+}
+
+function algNavToPdp(url, objectID) {
+    document.location.href = getProductPageUrl(url);
+}
+
+function createAlgoliaWidgets() {
+    document.querySelector('.algolia-widget-container').classList.add('alg-quick-links');
+    createPopularKeywordWidget('#alg-pouplar-keywords', '.alg-pouplar-keywords', true);
+    search.addWidgets([
+        {
+            render({ results }) {
+                let resultsCount = 0;
+                if (results?.query?.length >= minimumCharactersToSearch) {
+                    resultsCount = (results.hits?.length || 0);
+                    document.querySelector('.alg-results-count-info').classList.remove('d-none');
+                } else {
+                    document.querySelector('.alg-results-count-info').classList.add('d-none');
+                }
+
+                const countElement = document.querySelector('.alg-results-count-info .alg-final-count');
+                if (countElement) {
+                    countElement.innerHTML = resultsCount;
+                }
+            }
+        },
+        instantsearch.widgets.configure({
+            hitsPerPage: 4,
+        }),
+        instantsearch.widgets.hits({
+            container: '#alg-search-products',
+            templates: {
+                empty: ({ query }, { html }) => {
+                    document.querySelector('.algolia-widget-container').classList.add('alg-search-prodcuts');
+                    document.querySelector('.alg-product-col').classList.add('alg-empty-results');
+                    return html;
+                },
+                item: (hit, { components }) => {
+                    document.querySelector('.algolia-widget-container').classList.add('alg-search-prodcuts');
+                    document.querySelector('.alg-product-col').classList.remove('alg-empty-results');
+                    return '<a href="' + getProductPageUrl(hit.Url) + '" onclick=storeProductQueryData("' + hit.__queryID + '") class="alg-product-card"><div class="alg-product-img"><img aria-hidden="true" src="' + hit["img-515Wx515H"] + '" alt=""/></div><div class="alg-product-name"><div class="alg-product-name-ellipsis">' + hit.Name + '</div></div></a';
+                }
+            },
+        }),
+        instantsearch.widgets.hits({
+            container: '#alg-top-suggestions-prducts',
+            templates: {
+                empty: ({ query }, { html }) => {
+                    document.querySelector('.alg-widgets-col').classList.add('alg-empty-product-results');
+                    return html;
+                },
+                item: (hit, { query }) => {
+                    document.querySelector('.alg-widgets-col').classList.remove('alg-empty-product-results');
+                    return '<a onclick=storeProductQueryData("' + hit.__queryID + '") href="' + getProductPageUrl(hit.Url) + '" class="alg-product-suggenstion-item alg-product-nav">' + instantsearch.highlight({ attribute: 'Name', hit }) + '</a';
+                }
+            },
+        }),
+        instantsearch.widgets
+            .index({ indexName: algQuerySuggestionIndex })
+            .addWidgets([
+                instantsearch.widgets.configure({
+                    hitsPerPage: 3,
+                }),
+                instantsearch.widgets.hits({
+                    container: topSuggestionsSelector,
+                    templates: {
+                        empty: ({ query }, { html }) => {
+                            document.querySelector('.alg-widgets-col').classList.add('alg-empty-query-results');
+                            return html;
+                        },
+                        item: (hit, { query }) => {
+                            document.querySelector('.alg-widgets-col').classList.remove('alg-empty-query-results');
+                            const currentHitCategory = hit?.[algMainIndex]?.facets?.exact_matches?.['CATEGORY']?.[0]?.value;
+                            let queryButtonText = '<span class="alg-capitalize">' + instantsearch.highlight({ attribute: 'query', hit }) + '</span>';
+
+                            if (currentHitCategory) {
+                                const categoryButtonText = '<span class="alg-capitalize">' + currentHitCategory + '</span>';
+                                const searchInTranslation = document.querySelector(topSuggestionsSelector).getAttribute('data-searchIn-translation');
+                                queryButtonText = searchInTranslation.replace('algQuery', queryButtonText).replace('algCategory', categoryButtonText);
+
+                            }
+
+                            return '<button class="alg-product-nav" role="link" onclick=updateRecentSearchAndShowSearchPage("' + encodeURIComponent(hit.query) + '","' + encodeURIComponent(hit.objectID) + '","' + getSearchResultPageUrl(hit.query) + '","' + encodeURIComponent(currentHitCategory) + '") data-href="' + getSearchResultPageUrl(hit.query) + '"><span class="screen-reader-only">Search: </span>' + queryButtonText + '</button>';
+                        }
+                    },
+                })
+            ])
+    ]);
+    search.start();
+    initInsights();
+}
+
+function getSearchResultPageUrl(term) {
+    const searchInputInstruction = document.getElementById('search-input-instruction');
+    const redirectBase = (searchInputInstruction.getAttribute('data-redirect') || '/');
+    const url = `${redirectBase}search/${encodeURIComponent(term?.toLowerCase())}`;
+    return url;
+}
+
+function getProductPageUrl(term) {
+    const searchInputInstruction = document.getElementById('search-input-instruction');
+    const redirectBase = (searchInputInstruction.getAttribute('data-redirect') || '/');
+    const url = `${location.origin}${redirectBase}${term}`;
+    return url.replace(/([^:]\/)\/+/g, "$1");;
+}
+
+function getTrendingFacets() {
+    try {
+        if (trendingFacets && trendingFacets.length) {
+            document.querySelector('#alg-featured-categories')?.classList.remove('d-none');
+            const trendingFacetsElement = document.createElement('ul');
+            trendingFacetsElement.classList.add('ais-Hits-list');
+            let trendingFacetsList = '';
+            trendingFacets.forEach(facetValue => {
+                trendingFacetsList += '<li class="alg-featured-category-item"><button class="alg-product-nav" role="link" data-search-label="' + facetValue + '" data-href="' + getSearchResultPageUrl(facetValue) + '"><span class="screen-reader-only">Search: </span>' + facetValue + '</button></li>';
+            });
+
+            trendingFacetsElement.innerHTML = trendingFacetsList;
+            document.getElementById('alg-featured-categories')?.appendChild(trendingFacetsElement);
+            document.querySelectorAll('#alg-widget-container .alg-featured-category-item').forEach(function (elem) {
+                elem.addEventListener("click", function (e) {
+                    const currentSearchLabel = e.target.getAttribute('data-search-label');
+                    const currentSearchUrl = e.target.getAttribute('data-href');
+                    updateRecentSearchAndShowSearchPage(currentSearchLabel, currentSearchLabel, currentSearchUrl);
+                });
+            });
+        }
+        document.querySelector('.algolia-widget-container').classList.add('alg-feature-cat');
+    } catch (error) {
+        document.querySelector('.algolia-widget-container').classList.add('alg-feature-cat');
+    }
+}
+
+// Insights Code Start
+function initInsights() {
+    if (insightInitialized) {
+        return;
+    }
+
+    setAlgConfigs();
+    setAlgSearchClient();
+    aa('init', {
+        appId: algoliaAppId,
+        apiKey: algoliaApi
+    });
+    const ratUid = getCookieValue('_ratuid');
+    if (ratUid) {
+        aa('setUserToken', ratUid);
+    }
+    insightInitialized = true;
+}
+
+function algEventQuickLinkHit(algInsightData) {
+    const algEnvetName = 'Clicked Quick Links';
+    algInsightData.eventName = algEnvetName;
+    aa('clickedObjectIDsAfterSearch', algInsightData);
+}
+
+function algEventNotifyMe(algInsightData) {
+    const algEnvetName = 'Product Interest Submitted';
+    algInsightData.eventName = algEnvetName;
+    aa('clickedObjectIDsAfterSearch', algInsightData);
+}
+
+function algEventAddToCart(algInsightData) {
+    const algEnvetName = 'Products Added to Cart';
+    const algEventData = getAlgSearchEventData();
+
+    if (algEventData?.queryID && algInsightData?.objectIDs?.length) {
+        algInsightData.eventName = algEnvetName;
+        algInsightData.queryID = algEventData?.queryID;
+        algInsightData.query = algEventData?.query;
+        algInsightData.index = algMainIndex;
+        aa('addedToCartObjectIDsAfterSearch', algInsightData);
+    }
+}
+
+function algEventPurchase(algInsightData) {
+    const algEnvetName = 'Payment Completed';
+
+    if (algInsightData?.objectIDs?.length) {
+        algInsightData.eventName = algEnvetName;
+        algInsightData.index = algMainIndex
+        aa('purchasedObjectIDsAfterSearch', algInsightData);
+    }
+}
+
+// Insights Code End
+
+// Pagination Code Start
+
+function ssrPaginationHtml(paginationData) {
+    let ssrPagination = '';
+    if (paginationData.totalPages > 0) {
+        ssrPagination = getPaginationHtml(paginationData);
+    }
+
+    document.querySelector('#razer-alg-pagination').innerHTML = ssrPagination;
+}
+
+function getAriaDisabledAttrHtml(razerSsrCurrentPage) {
+    if (razerSsrCurrentPage === 0) {
+        return 'aria-disabled="true"';
+    }
+
+    return '';
+}
+
+function getAriaDisabledRightAttrHtml(paginationData, razerSsrCurrentPage) {
+    if (paginationData.totalPages === (razerSsrCurrentPage + 1)) {
+        return "aria-disabled='true'";
+    }
+
+    return '';
+}
+
+function getButtonPageNumber(razerSsrCurrentPage) {
+    if ((razerSsrCurrentPage - 1) < 0) {
+        return 0;
+    }
+
+    return (razerSsrCurrentPage - 1);
+}
+
+function getRightButtonPageNumber(razerSsrCurrentPage, paginationData) {
+    if ((razerSsrCurrentPage + 1) >= paginationData.totalPages) {
+        return (paginationData.totalPages - 1);
+    }
+
+    return (razerSsrCurrentPage + 1);
+}
+
+function getPreviousPagesButtonsHtml(paginationData) {
+    let buttonsHtml = '';
+    if (paginationData.totalPages > 3) {
+        buttonsHtml += `<li class="page-item">
+                <button onclick="setAlgPage(0, this)" ${getAriaDisabledAttrHtml(razerSsrCurrentPage)}
+                    aria-label="Go to first">
+                    <span class="icon page-icon page-backward-icon" aria-hidden="true"></span>
+                </button>
+            </li>`
+    }
+    if (paginationData.totalPages > 1) {
+        buttonsHtml += `<li class="page-item">
+                <button onclick="setAlgPage(${getButtonPageNumber(razerSsrCurrentPage)}, this)"
+                ${getAriaDisabledAttrHtml(razerSsrCurrentPage)} aria-label="Previous">
+                    <span class="icon page-icon page-previous" aria-hidden="true"></span>
+                </button>
+            </li>`;
+    }
+
+    return buttonsHtml;
+}
+
+function getNextPagesButtonsHtml(paginationData) {
+    let buttonsHtml = '';
+    if (paginationData.totalPages > 1) {
+        buttonsHtml += `<li class="page-item">
+                <button ${getAriaDisabledRightAttrHtml(paginationData, razerSsrCurrentPage)}
+                    aria-label="Next"
+                    onclick="setAlgPage(${getRightButtonPageNumber(razerSsrCurrentPage, paginationData)}, this)">
+                    <span class="icon page-icon page-next" aria-hidden="true"></span>
+                </button>
+            </li>`
+    }
+    if (paginationData.totalPages > 3) {
+        buttonsHtml += `<li class="page-item">
+                <button onclick="setAlgPage(${paginationData.totalPages - 1}, this)" aria-label="Go to last"
+                    ${getAriaDisabledRightAttrHtml(paginationData, razerSsrCurrentPage)}>
+                    <span class="icon page-icon page-forward-icon" aria-hidden="true"></span>
+                </button>
+            </li>`
+    }
+
+    return buttonsHtml;
+}
+
+function getHiddenButtonClass(i, paginationData) {
+    if (!canShowPaginationButton(i, paginationData)) {
+        return "d-none";
+    }
+
+    return '';
+}
+
+function getActiveClassAttrHtml(i) {
+    if (razerSsrCurrentPage === i) {
+        return "class='active'";
+    }
+
+    return '';
+}
+
+function getButtonAriaDisabledAttrHtml(i) {
+    if (razerSsrCurrentPage === i) {
+        return "aria-disabled='true'";
+    }
+
+    return '';
+}
+
+function getButtonAriaCurrentAttrHtml(i) {
+    if (razerSsrCurrentPage === i) {
+        return "aria-current='true'";
+    }
+
+    return '';
+}
+
+function getButtonAriaHiddenAttrHtml(i, paginationData) {
+    if (!canShowPaginationButton(i, paginationData)) {
+        return "aria-hidden='true'";
+    }
+
+    return '';
+}
+
+function getPageButtonHtml(i, paginationData) {
+    return `<li class="page-item ${getHiddenButtonClass(i, paginationData)}">
+                <button onclick="setAlgPage(${i}, this)" aria-label="'Go to slide '${i + 1}"
+                    ${getActiveClassAttrHtml(i)}
+                    ${getButtonAriaDisabledAttrHtml(i)}
+                    ${getButtonAriaCurrentAttrHtml(i)}
+                    ${getButtonAriaHiddenAttrHtml(i, paginationData)}>
+                    ${i + 1}
+                </button>
+            </li> `;
+}
+
+function getPaginationHtml(paginationData) {
+    return `
+    <div class="razer-pagination" aria-label="pagination" role="region">
+        <ul>
+            ${getPreviousPagesButtonsHtml(paginationData)}
+            <li aria-hidden="true" class="page-item more-nav ${!canShowLeftNavMore(paginationData) ? " hidden-nav-more" : ''}">
+            <button disabled>
+                ...
+            </button>
+        </li>
+                    ${Array.from({ length: paginationData?.totalPages }, (_, i) => `
+                    ${(
+            (razerSsrCurrentPage - razerSsrItemsCountPerSlide) <= i) &&
+            ((razerSsrCurrentPage + razerSsrItemsCountPerSlide) >= i) ? getPageButtonHtml(i, paginationData) : ''}
+                    `).join('')
+        }
+<li aria-hidden="true" class="page-item more-nav ${!canShowRightNavMore(paginationData) ? " hidden-nav-more" : ''}">
+    <button disabled>
+        ...
+    </button>
+                    </li>
+    ${getNextPagesButtonsHtml(paginationData)}
+                </ul>
+            </div>
+    `;
+}
+
+function canShowPaginationButton(page, paginationData) {
+    const pageNumber = page + 1;
+    const totalPages = paginationData.totalPages;
+    const totalSlides = Math.ceil(totalPages / razerSsrItemsCountPerSlide);
+    const currentActivePage = razerSsrCurrentPage + 1;
+    const currentSlide = Math.ceil(currentActivePage / razerSsrItemsCountPerSlide);
+    const pageSlide = Math.ceil(pageNumber / razerSsrItemsCountPerSlide);
+
+    if (
+        (pageSlide === currentSlide) ||
+        (
+            currentSlide !== 1 &&
+            currentSlide !== totalSlides &&
+            totalSlides >= 3 &&
+            (pageNumber === (((currentSlide - 1) * razerSsrItemsCountPerSlide)))) ||
+        (
+            (currentSlide !== 1) &&
+            (totalSlides === currentSlide) &&
+            (pageNumber > (totalPages - razerSsrItemsCountPerSlide))
+        )
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+function canShowRightNavMore(paginationData) {
+    const currentActivePage = razerSsrCurrentPage + 1;
+    const currentSlide = Math.ceil(currentActivePage / razerSsrItemsCountPerSlide);
+
+    if (currentSlide === 1 && paginationData.totalPages > razerSsrItemsCountPerSlide) {
+        return true;
+    }
+
+    return false;
+}
+
+function canShowLeftNavMore(paginationData) {
+    const totalSlides = Math.ceil(paginationData.totalPages / razerSsrItemsCountPerSlide);
+    const currentActivePage = razerSsrCurrentPage + 1;
+    const currentSlide = Math.ceil(currentActivePage / razerSsrItemsCountPerSlide);
+
+    if (totalSlides === currentSlide && paginationData.totalPages > razerSsrItemsCountPerSlide) {
+        return true;
+    }
+
+    return false;
+}
+
+// Pagination Code End.
+
+// Get Cookie name specific value
+function getCookieValue(name) {
+    const regex = new RegExp(`(^| )${name}=([^;]+)`);
+    const match = document.cookie.match(regex);
+
+    if (match) {
+        return match[2];
+    }
+    return '';
+}

@@ -1,0 +1,443 @@
+window._RzidTosConsent = {
+    _version: '1.0.1',
+    _config: null,
+    _iframeContainer: null,
+    _iframe: null,
+    _messageHandler: null,
+    _cookieName: 'RazerTosConsent',
+    _loggingUrl: 'https://razerid.razer.com/api/tos-sdk-logging',
+    _originalBodyOverflow: null,
+    _originalHtmlOverflow: null,
+    _scrollPreventionActive: false,
+    _messageTypes: {
+        // Iframe communication
+        IFRAME_LOADED: 'RZID_TOS_IFRAME_LOADED',
+        TOS_CONTENT: 'RZID_TOS_CONTENT',
+        // Consent flow
+        CONSENT_ACCEPTED: 'RZID_TOS_CONSENT_ACCEPTED',
+        CONSENT_SUBMITTED: 'RZID_TOS_CONSENT_SUBMITTED',
+        CONSENT_REJECTED: 'RZID_TOS_CONSENT_REJECTED',
+    },
+
+    helpers: {
+        generateUniqueToken() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < 32; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        },
+
+        getCookie() {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${this._cookieName}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        },
+
+        setCookie(value) {
+            let expiry = new Date();
+            expiry.setTime(expiry.getTime() + (4 * 60 * 60 * 1000));
+            document.cookie = `${this._cookieName}=${value}; path=/; expires=${expiry.toUTCString()}`;
+        },
+
+        createIframeContainer() {
+            const container = document.createElement('div');
+            container.id = 'rzid-tos-container';
+            container.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.7);
+                z-index: 9998;
+                display: none;
+            `;
+            return container;
+        },
+
+        createLoadingIndicator() {
+            const loading = document.createElement('div');
+            loading.id = 'rzid-tos-loading';
+            loading.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                color: white;
+                font-family: Arial, sans-serif;
+                z-index: 9999;
+            `;
+            return loading;
+        },
+
+        createIframe() {
+            const iframe = document.createElement('iframe');
+            iframe.id = this._config.iframeId;
+            iframe.style.cssText = `
+                width: 100%;
+                height: 100%;
+                background: transparent;
+                border: none;
+                z-index: 9999;
+            `;
+            return iframe;
+        },
+
+        showContainer() {
+            if (this._iframeContainer) {
+                this._iframeContainer.style.display = 'block';
+            }
+        },
+
+        hideContainer() {
+            if (this._iframeContainer) {
+                this._iframeContainer.style.display = 'none';
+            }
+        },
+
+        toggleScrolling(disable = true) {
+            if (disable && this._scrollPreventionActive) return;
+            if (!disable && !this._scrollPreventionActive) return;
+
+            if (disable) {
+                this._originalBodyOverflow = document.body.style.overflow || null;
+                this._originalHtmlOverflow = document.documentElement.style.overflow || null;
+
+                if (!this._originalBodyOverflow) {
+                    document.body.style.overflow = 'hidden';
+                }
+                if (!this._originalHtmlOverflow) {
+                    document.documentElement.style.overflow = 'hidden';
+                }
+
+                document.addEventListener('wheel', this.preventDefault, { passive: false });
+                document.addEventListener('touchmove', this.preventDefault, { passive: false });
+                document.addEventListener('keydown', this.preventScrollKeys, false);
+
+                this._scrollPreventionActive = true;
+
+            } else {
+                if (this._originalBodyOverflow === null) {
+                    document.body.style.overflow = '';
+                } else {
+                    document.body.style.overflow = this._originalBodyOverflow;
+                }
+
+                if (this._originalHtmlOverflow === null) {
+                    document.documentElement.style.overflow = '';
+                } else {
+                    document.documentElement.style.overflow = this._originalhtmlOverflow
+                }
+
+                document.removeEventListener('wheel', this.preventDefault, { passive: false });
+                document.removeEventListener('touchmove', this.preventDefault, { passive: false });
+                document.removeEventListener('keydown', this.preventScrollKeys, false);
+
+                this._originalBodyOverflow = null;
+                this._originalHtmlOverflow = null;
+                this._scrollPreventionActive = false;
+            }
+        },
+
+        preventDefault(e) {
+            e.preventDefault();
+        },
+
+        preventScrollKeys(e) {
+            const keys = [32, 33, 34, 37, 38, 39, 40];
+            if (keys.includes(e.keyCode)) {
+                e.preventDefault();
+            }
+        },
+
+        cleanup() {
+            const container = this._iframeContainer;
+
+            this.helpers.toggleScrolling(false);
+
+            this._iframeContainer = null;
+            this._iframe = null;
+
+            if (container) {
+                container.remove();
+            }
+        }
+    },
+
+    actions: {
+        async checkConsent({ accessToken, uuid }) {
+            try {
+                const response = await fetch(`${this._config.tosApi}/user/tos_consent`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        data: {
+                            service_code: this._config.serviceCode
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(response.status === 401 ? 'Access token is invalid' :
+                        (await response.json()).message || response.statusText);
+                }
+
+                const data = await response.json();
+                return data.has_consent;
+            } catch (error) {
+                this.log(uuid);
+                throw new Error('[TosConsent SDK] Error checking consent:', error.message);
+            }
+        },
+
+        async submitConsent({ accessToken, readTokens, consentToken, uuid }) {
+            try {
+                const response = await fetch(`${this._config.tosApi}/tos_consent`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        data: {
+                            read_token: readTokens.join(';'),
+                            consent_token: consentToken,
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(response.status === 401 ? 'Access token is invalid' :
+                        (await response.json()).message || response.statusText);
+                }
+
+                this.helpers.setCookie('2');
+                return true;
+            } catch (error) {
+                this.log(uuid);
+                throw new Error('[TosConsent SDK] Error submitting consent:', error.message);
+            }
+        },
+
+        async generateTosTokens(uuid) {
+            try {
+                const response = await fetch(`${this._config.tosApi}/tos`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        data: {
+                            service_code: this._config.serviceCode,
+                            unique_token: this.helpers.generateUniqueToken(),
+                            tos_content_type: 'text/html'
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error((await response.json()).message || response.statusText);
+                }
+
+                return await response.json();
+            } catch (error) {
+                this.log(uuid);
+                throw new Error('[TosConsentSDK] Error generating TOS tokens:', error.message);
+            }
+        },
+
+        async showConsentDialog({ accessToken, uuid }) {
+            this.helpers.cleanup();
+
+            this._iframeContainer = this.helpers.createIframeContainer();
+            this._iframe = this.helpers.createIframe();
+            const loading = this.helpers.createLoadingIndicator();
+            this._iframeContainer.appendChild(loading);
+            this._iframeContainer.appendChild(this._iframe);
+            document.body.appendChild(this._iframeContainer);
+
+            this._contentLoaded = false;
+
+            const handleFailure = (error) => {
+                if (!this._contentLoaded) {
+                    console.error(error);
+                    this.log(uuid, true);
+                    this.destroy();
+                }
+            }
+
+            let tosData;
+            try {
+                tosData = await this.actions.generateTosTokens(uuid);
+            } catch (error) {
+                console.error(error);
+                clearTimeout(this._tosTimeout);
+                this.destroy();
+                return;
+            }
+
+            this._tosTimeout = setTimeout(() => {
+                handleFailure('[TosConsent SDK] Iframe failed to load within timeout period');
+            }, 10000);
+
+            try {
+                const params = new URLSearchParams({
+                    accessToken,
+                    parentOrigin: window.location.origin,
+                    lang: this._config.lang
+                });
+
+                this._iframe.src = `${this._config.tosUrl}?${params.toString()}`;
+                this._iframeContainer.style.display = 'block';
+
+                this._tosData = tosData;
+            } catch (error) {
+                clearTimeout(this._tosTimeout);
+                handleFailure('[TosConsent SDK] Error showing consent dialog:', error.message);
+            }
+        },
+    },
+
+    handlers: {
+        async handleMessage(e) {
+            const { type, accessToken, readTokens, consentToken } = e.data;
+
+            switch (type) {
+                case this._messageTypes.IFRAME_LOADED:
+                    this._contentLoaded = true;
+
+                    if (this._tosTimeout) {
+                        clearTimeout(this._tosTimeout);
+                        this._tosTimeout = null;
+                    }
+
+                    if (this._tosData && this._iframe?.contentWindow) {
+                        this._iframe.contentWindow.postMessage({
+                            type: this._messageTypes.TOS_CONTENT,
+                            tosData: this._tosData
+                        }, '*');
+
+                        this._tosData = null;
+                    }
+
+                    document.getElementById('rzid-tos-loading')?.remove();
+                    this.helpers.showContainer();
+
+                    this.helpers.toggleScrolling(true);
+
+                    this._config.onLoad?.();
+                    break;
+
+                case this._messageTypes.CONSENT_ACCEPTED:
+                    try {
+                        this.helpers.toggleScrolling(false);
+
+                        this.helpers.hideContainer();
+                        await this.actions.submitConsent({ accessToken, readTokens, consentToken, uuid: this._config.uuid });
+
+                        this._iframe?.contentWindow?.postMessage({
+                            type: this._messageTypes.CONSENT_SUBMITTED
+                        }, '*');
+
+                        this.destroy();
+                    } catch (error) {
+                        this.destroy();
+                    }
+                    break;
+
+                case this._messageTypes.CONSENT_REJECTED:
+                    this.helpers.toggleScrolling(false);
+                    
+                    this.destroy();
+                    this._config.onReject?.();
+                    break;
+            }
+        },
+    },
+
+    defaults: {
+        iframeId: 'rzid-tos-consent-iframe',
+        tosUrl: 'https://tos-consent.razer.com',
+        tosApi: 'https://razerid.razer.com/api/tos',
+        serviceCode: '0060',
+    },
+
+    async init(config = {}) {
+        if (!config.accessToken) {
+            throw new Error('Access token is missing');
+        }
+
+        if (typeof config.accessToken !== 'string' || !config.accessToken.trim()) {
+            throw new Error('Access token cannot be empty');
+        }
+
+        const lang = config.lang || 'en';
+
+        this._config = {
+            ...this.defaults,
+            ...config,
+            lang
+        };
+
+        const bindMethods = (obj) => {
+            Object.keys(obj).forEach(key => {
+                if (typeof obj[key] === 'function') {
+                    obj[key] = obj[key].bind(this);
+                }
+            });
+        };
+
+        ['actions', 'helpers', 'handlers'].forEach(prop => bindMethods(this[prop]));
+
+        this._messageHandler = this.handlers.handleMessage.bind(this);
+        window.addEventListener('message', this._messageHandler);
+
+        const consentCookie = this.helpers.getCookie();
+
+        if (!consentCookie) {
+            try {
+                const hasConsent = await this.actions.checkConsent({ accessToken: this._config.accessToken, uuid: this._config.uuid });
+                if (hasConsent) {
+                    this.helpers.setCookie('2');
+                } else {
+                    this.helpers.setCookie('1');
+                    this.actions.showConsentDialog({ accessToken: this._config.accessToken, uuid: this._config.uuid });
+                }
+            } catch (error) {
+                console.error(error)
+                this.destroy();
+                return
+            }
+        } else if (consentCookie === '1') {
+            this.actions.showConsentDialog({ accessToken: this._config.accessToken, uuid: this._config.uuid });
+        }
+
+        console.log(`[TosConsent SDK] v${this._version} initialized.`);
+    },
+
+    async log(uuid, isTimeout) {
+        const url = `${this._loggingUrl}?uuid=${uuid}&type=${isTimeout ? 'timeout' : 'consent_failure'}`;
+        try {
+            await fetch(url, {
+                method: 'GET',
+            });
+        } catch (error) {
+            console.error('[TosConsent SDK] Error logging:', error.message);
+        }
+    },
+
+    destroy() {
+        if (this._messageHandler) {
+            window.removeEventListener('message', this._messageHandler);
+            this._messageHandler = null;
+        }
+        this.helpers.cleanup();
+        console.log('[TosConsent SDK] destroyed');
+    },
+};

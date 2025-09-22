@@ -1,0 +1,72 @@
+setTimeout(function(){
+
+if(document.querySelector(".footer:not(.validFooter)")){ 
+	document.querySelector(".footer").classList.add("validFooter");
+	var footer_acc = document.getElementsByClassName("footer-label-v2");
+	var footer_check_screen_width = window.innerWidth;
+    var resizeWinFooter = function(){
+    	if (window.innerWidth != footer_check_screen_width) {
+         	footer_check_screen_width = window.innerWidth;
+       		initFooterAccordion();
+        }
+    }
+    var initFooterAccordion = function(){
+        if (footer_check_screen_width <= 767) {
+            for (var i = 0; i < footer_acc.length; i++) {
+				let id_footer = "footer-accordion-"+i;
+				footer_acc[i].setAttribute("role","button");
+				footer_acc[i].setAttribute("tabindex","0");
+				footer_acc[i].setAttribute("aria-expanded","false");
+				footer_acc[i].setAttribute("aria-controls", id_footer);
+                footer_acc[i].addEventListener("click", toggleFooterAccordion, false);
+				footer_acc[i].addEventListener("keyup", toggleFooterAccordionKeyPress, false);
+				
+                footer_acc[i].classList.remove("footer-active");
+                footer_acc[i].nextElementSibling.style.display = "none";
+				footer_acc[i].nextElementSibling.id = id_footer;
+            } 
+        }
+        else {
+            for (var i = 0; i < footer_acc.length; i++) {
+				footer_acc[i].removeAttribute("role","button");
+				footer_acc[i].removeAttribute("tabindex");
+				footer_acc[i].removeAttribute("aria-expanded");
+				footer_acc[i].removeAttribute("aria-controls");
+                footer_acc[i].removeEventListener("click", toggleFooterAccordion, false);
+				footer_acc[i].removeEventListener("keyup", toggleFooterAccordionKeyPress, false);
+                footer_acc[i].classList.remove("footer-active");
+                footer_acc[i].nextElementSibling.style.display = "block";
+				footer_acc[i].nextElementSibling.removeAttribute("id");
+            } 
+        }
+    }
+	var toggleFooterAccordion = function(ev){ 
+        for (var j = 0; j < footer_acc.length; j++) { 
+            if (footer_acc[j].classList.contains("footer-active") && (ev.currentTarget.classList.contains("footer-active")===false)){
+                footer_acc[j].classList.remove("footer-active");
+                footer_acc[j].nextElementSibling.style.display = "none";
+				footer_acc[j].setAttribute("aria-expanded","false");
+            }
+        }
+        ev.currentTarget.classList.toggle("footer-active");
+        var footerpanel = ev.currentTarget.nextElementSibling;
+        if (footerpanel.style.display === "block") {
+       	    footerpanel.style.display = "none";
+			ev.currentTarget.setAttribute("aria-expanded","false");
+        } else {
+            footerpanel.style.display = "block";
+			ev.currentTarget.setAttribute("aria-expanded","true");
+        }
+    }
+	var toggleFooterAccordionKeyPress = function(e){
+		if(e.key == ' ' || e.key == 'Enter'){toggleFooterAccordion(e);}
+	};	
+	initFooterAccordion();
+    window.addEventListener("resize", resizeWinFooter);
+	
+	
+}
+
+}, 
+1000
+);
